@@ -110,8 +110,12 @@ version-based vulnerabilities**. It never attempts to exploit anything.
   from the config, with flags overriding it.
 - **Shell completions** for bash, zsh and fish (`--completion <shell>`).
 - **CLI *and* a web GUI** with live progress, a cancel button, optional Basic
-  auth, and a persistent, collapsible history of previous scans with per-scan
-  downloads.
+  auth, a persistent collapsible history, per-scan downloads, a resizable
+  results area, **bulk target loading from a file**, **allow/block** overrides,
+  a **Compare** tab (diff any two scans), a **Statistics** tab (top vulns,
+  oldest PHP/app, top apps/networks, …) and an **Info** tab that lists every
+  framework/addon/vulnerability as a clickable tag.
+- **Target allow/block lists** (`--allow`/`--block`, host/CIDR/`*.domain`).
 - **Zero external dependencies** — the entire tool builds from the Go standard
   library, including the YAML parser, the RTF/PDF writers, the SOCKS5 client
   and the mmh3 favicon hash.

@@ -204,7 +204,23 @@ SARIF, text, HTML, RTF and PDF, named uniquely with the scan's timestamp.
 
 The targets box supports **bulk loading from a file** ("Load from file…"):
 one or more local lists are read in the browser (nothing is uploaded) and
-their lines appended, with `#` comments and blanks skipped.
+their lines appended, with `#` comments and blanks skipped. An **Allow / block
+lists** section lets you override the target list (keep only matching hosts,
+or drop matching hosts). The results area is **resizable**, and each result
+card shows the **DNS name** and any resolved **A/PTR** records at its top.
+
+The GUI has four tabs:
+
+- **Scan** — configure and run a scan, watch progress, browse results and the
+  previous-scan history.
+- **Compare** — pick any two retained scans (or an older one against the
+  latest) and see added/removed services and per-service verdict, version and
+  vulnerability changes.
+- **Statistics** — figures aggregated across all retained scans: highest
+  severity, top vulnerabilities, oldest PHP version, oldest application
+  version, average scan time, top applications and top networks.
+- **Info** — a findings explorer: every framework, addon/tool and
+  vulnerability as a tag; click one to list the scan items that carry it.
 
 Protect the GUI with `--web-auth user:pass` (HTTP Basic auth). It is bound to
 localhost by default; exposing it to a network makes a scan trigger available
