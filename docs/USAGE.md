@@ -221,11 +221,13 @@ The GUI has four tabs:
   control orders the Results and PHP tabs by scan order or with PHP services
   (highest confidence first) on top. Most controls have **mouse-over help**.
 - **Compare** — pick any two retained scans (or an older one against the
-  latest) and see added/removed services and per-service verdict, version and
-  vulnerability changes.
-- **Statistics** — figures aggregated across all retained scans: highest
-  severity, top vulnerabilities, oldest PHP version, oldest application
-  version, average scan time, top applications and top networks.
+  latest), **or load a previously saved scan file (JSON or XML)** as the
+  baseline, and see added/removed services and per-service verdict, version
+  and vulnerability changes.
+- **Statistics** — figures aggregated across all retained scans, with **pie
+  and bar charts**: vulnerability-lead severities and PHP verdicts as pies;
+  top vulnerabilities, top applications and top networks as bars; plus
+  highest severity, oldest PHP/application version and average scan time.
 - **Info** — a findings explorer: every framework, addon/tool and
   vulnerability as a tag; click one to list the scan items that carry it.
 

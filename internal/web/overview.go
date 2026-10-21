@@ -56,6 +56,10 @@ type overviewStats struct {
 	TopVulns        []topEntry `json:"top_vulns"`
 	TopApps         []topEntry `json:"top_apps"`
 	TopNetworks     []topEntry `json:"top_networks"`
+	// Breakdowns for charts: vulnerability leads by severity, and PHP-analysed
+	// services by verdict.
+	SeverityBreakdown map[string]int `json:"severity_breakdown"`
+	VerdictBreakdown  map[string]int `json:"verdict_breakdown"`
 }
 
 type overview struct {
@@ -81,6 +85,8 @@ func (s *Server) computeOverview() overview {
 	netCount := map[string]int{}
 
 	var stats overviewStats
+	stats.SeverityBreakdown = map[string]int{}
+	stats.VerdictBreakdown = map[string]int{}
 	var durSum int64
 	var durN int
 	stats.Scans = len(items)
@@ -105,6 +111,9 @@ func (s *Server) computeOverview() overview {
 				if p.Verdict != "none" && p.Verdict != "" {
 					stats.PHPServices++
 				}
+				if v := string(p.Verdict); v != "" {
+					stats.VerdictBreakdown[v]++
+				}
 				for _, f := range p.Frameworks {
 					fw.add(f, "", ref)
 					appCount[f]++
@@ -115,6 +124,11 @@ func (s *Server) computeOverview() overview {
 				for _, v := range p.Vulnerabilities {
 					vuln.add(v.ID, v.Severity, ref)
 					vulnSev[v.ID] = v.Severity
+					sev := v.Severity
+					if sev == "" {
+						sev = "unknown"
+					}
+					stats.SeverityBreakdown[sev]++
 					if sevRank(v.Severity) > sevRank(stats.HighestSeverity) {
 						stats.HighestSeverity = v.Severity
 					}

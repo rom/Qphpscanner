@@ -95,6 +95,27 @@ details.advanced > summary { cursor: pointer; font-size: .82rem; color: var(--ac
 .item-list li { padding: 5px 0; border-bottom: 1px dashed var(--border); font-family: ui-monospace, Menlo, Consolas, monospace; }
 .item-list .when { color: var(--text-dim); margin-left: 8px; font-family: inherit; }
 
+/* statistics charts */
+.chart { margin-top: 18px; }
+.chart > h3 { margin: 0 0 8px; font-size: .95rem; color: var(--text-dim); }
+.chart-row { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 18px; }
+.chart-row .chart { flex: 1 1 280px; margin-top: 0; }
+.pie-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.pie {
+  width: 150px; height: 150px; border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+.legend { display: flex; flex-direction: column; gap: 5px; font-size: .82rem; }
+.legend-item { display: flex; align-items: center; gap: 7px; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
+.barlist { display: flex; flex-direction: column; gap: 6px; }
+.bar-row { display: grid; grid-template-columns: minmax(90px, 32%) 1fr auto; gap: 10px; align-items: center; font-size: .82rem; }
+.bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.bar-track { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px; height: 18px; overflow: hidden; }
+.bar-fill { height: 100%; min-width: 2px; border-radius: 6px 0 0 6px; }
+.bar-val { color: var(--text-dim); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; }
+
 .diff-group { margin-top: 14px; }
 .diff-group > h4 { margin: 0 0 6px; font-size: .9rem; }
 .diff-added { color: var(--green); }

@@ -138,6 +138,7 @@ const splitList = (s) =>
 document.addEventListener("DOMContentLoaded", refreshHistory);
 $("cmp-run") && $("cmp-run").addEventListener("click", runCompare);
 $("cmp-refresh") && $("cmp-refresh").addEventListener("click", refreshCompareList);
+wireCompareUpload();
 $("stats-refresh") && $("stats-refresh").addEventListener("click", () => loadOverview(true).then(renderStats));
 $("info-refresh") && $("info-refresh").addEventListener("click", () => loadOverview(true).then(renderInfo));
 
@@ -872,19 +873,64 @@ async function refreshCompareList() {
   }
 }
 
+let cmpUpload = null; // text of a loaded JSON/XML scan file, used as baseline A
+
+function wireCompareUpload() {
+  const fileEl = $("cmp-file");
+  const nameEl = $("cmp-file-name");
+  const clearEl = $("cmp-file-clear");
+  if (!fileEl) return;
+  fileEl.addEventListener("change", async () => {
+    const f = (fileEl.files || [])[0];
+    if (!f) return;
+    try {
+      cmpUpload = await f.text();
+      nameEl.textContent = " " + f.name;
+      clearEl.classList.remove("hidden");
+      $("cmp-a").disabled = true;
+    } catch (_) {
+      cmpUpload = null;
+      nameEl.textContent = " (could not read file)";
+    }
+    fileEl.value = "";
+  });
+  clearEl.addEventListener("click", () => {
+    cmpUpload = null;
+    nameEl.textContent = "";
+    clearEl.classList.add("hidden");
+    $("cmp-a").disabled = false;
+  });
+}
+
 async function runCompare() {
-  const a = $("cmp-a").value;
   const b = $("cmp-b").value;
   const out = $("cmp-result");
   out.replaceChildren();
-  if (!a || !b) {
-    out.appendChild(el("p", "empty", "Run at least two scans to compare."));
+  if (!b) {
+    out.appendChild(el("p", "empty", "Run or load at least one scan to compare against."));
     return;
   }
   try {
-    const resp = await fetch(`api/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+    let data;
+    if (cmpUpload) {
+      // Baseline A is an uploaded saved scan (JSON or XML).
+      const resp = await fetch(`api/diff-upload?b=${encodeURIComponent(b)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: cmpUpload,
+      });
+      data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+    } else {
+      const a = $("cmp-a").value;
+      if (!a) {
+        out.appendChild(el("p", "empty", "Pick a baseline scan or load a saved scan file."));
+        return;
+      }
+      const resp = await fetch(`api/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+      data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+    }
     renderDiff(out, data.diff);
   } catch (err) {
     out.appendChild(el("p", "error", "Compare failed: " + err.message));
@@ -955,28 +1001,113 @@ function renderStats(ov) {
   if (s.oldest_php) body.appendChild(el("p", "note", `Oldest PHP ${s.oldest_php.version} on ${s.oldest_php.host} (${s.oldest_php.url})`));
   if (s.oldest_app) body.appendChild(el("p", "note", `Oldest application ${s.oldest_app.name} ${s.oldest_app.version} on ${s.oldest_app.host}`));
 
-  body.appendChild(topList("Top vulnerabilities", s.top_vulns, true));
-  body.appendChild(topList("Top applications", s.top_apps, false));
-  body.appendChild(topList("Top networks", s.top_networks, false));
+  // Pie charts: vulnerability-lead severities and PHP verdicts.
+  const pies = el("div", "chart-row");
+  pies.appendChild(pieChart("Vulnerability leads by severity", breakdownSlices(s.severity_breakdown, SEV_ORDER, sevColor)));
+  pies.appendChild(pieChart("Services by PHP verdict", breakdownSlices(s.verdict_breakdown, VERDICT_ORDER, verdictColor)));
+  body.appendChild(pies);
+
+  // Bar charts: toplists.
+  body.appendChild(barChart("Top vulnerabilities", s.top_vulns, (r) => sevColor(r.severity)));
+  body.appendChild(barChart("Top applications", s.top_apps, () => CHART_ACCENT));
+  body.appendChild(barChart("Top networks", s.top_networks, () => CHART_ACCENT2));
 }
 
-function topList(title, rows, withSev) {
-  const g = el("div", "tag-section");
-  g.appendChild(el("h3", null, title));
+/* ---------- charts (dependency-free) ---------- */
+
+const CHART_ACCENT = "#7c6cff";
+const CHART_ACCENT2 = "#4fd1c5";
+const SEV_ORDER = ["critical", "high", "medium", "low", "unknown"];
+const VERDICT_ORDER = ["confirmed", "likely", "possible", "none"];
+
+function sevColor(sev) {
+  switch ((sev || "").toLowerCase()) {
+    case "critical": return "#ff5c6c";
+    case "high": return "#ff9f45";
+    case "medium": return "#ffd166";
+    case "low": return "#64748b";
+    default: return "#94a3b8";
+  }
+}
+function verdictColor(v) {
+  switch ((v || "").toLowerCase()) {
+    case "confirmed": return "#ff5c6c";
+    case "likely": return "#ff9f45";
+    case "possible": return "#ffd166";
+    default: return "#64748b";
+  }
+}
+
+// breakdownSlices turns a {key:count} map into ordered pie slices.
+function breakdownSlices(m, order, colorFn) {
+  m = m || {};
+  const keys = Object.keys(m);
+  keys.sort((a, b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  return keys.filter((k) => m[k] > 0).map((k) => ({ label: k, value: m[k], color: colorFn(k) }));
+}
+
+function pieChart(title, slices) {
+  const wrap = el("div", "chart");
+  wrap.appendChild(el("h3", null, title));
+  const total = slices.reduce((a, s) => a + s.value, 0);
+  if (!total) {
+    wrap.appendChild(el("p", "empty", "—"));
+    return wrap;
+  }
+  let acc = 0;
+  const stops = [];
+  for (const s of slices) {
+    const start = (acc / total) * 100;
+    acc += s.value;
+    const end = (acc / total) * 100;
+    stops.push(`${s.color} ${start}% ${end}%`);
+  }
+  const row = el("div", "pie-row");
+  const pie = el("div", "pie");
+  pie.style.background = `conic-gradient(${stops.join(",")})`;
+  pie.setAttribute("role", "img");
+  pie.setAttribute("aria-label", title);
+  row.appendChild(pie);
+  const legend = el("div", "legend");
+  for (const s of slices) {
+    const item = el("div", "legend-item");
+    const sw = el("span", "swatch");
+    sw.style.background = s.color;
+    item.appendChild(sw);
+    item.appendChild(el("span", null, `${s.label} — ${s.value} (${Math.round((s.value / total) * 100)}%)`));
+    legend.appendChild(item);
+  }
+  row.appendChild(legend);
+  wrap.appendChild(row);
+  return wrap;
+}
+
+function barChart(title, rows, colorFn) {
+  const wrap = el("div", "chart");
+  wrap.appendChild(el("h3", null, title));
   if (!rows || !rows.length) {
-    g.appendChild(el("p", "empty", "—"));
-    return g;
+    wrap.appendChild(el("p", "empty", "—"));
+    return wrap;
   }
-  const ul = el("ul", "item-list");
+  const max = Math.max.apply(null, rows.map((r) => r.count));
+  const list = el("div", "barlist");
   for (const r of rows) {
-    const li = el("li");
-    if (withSev && r.severity) li.appendChild(el("span", "sev " + (r.severity || "low"), (r.severity || "").toUpperCase()));
-    li.appendChild(document.createTextNode(" " + r.key));
-    li.appendChild(el("span", "when", "×" + r.count));
-    ul.appendChild(li);
+    const brow = el("div", "bar-row");
+    brow.appendChild(el("span", "bar-label", r.key));
+    const track = el("div", "bar-track");
+    const fill = el("div", "bar-fill");
+    fill.style.width = (max ? Math.round((r.count / max) * 100) : 0) + "%";
+    fill.style.background = colorFn ? colorFn(r) : CHART_ACCENT;
+    track.appendChild(fill);
+    brow.appendChild(track);
+    brow.appendChild(el("span", "bar-val", String(r.count)));
+    list.appendChild(brow);
   }
-  g.appendChild(ul);
-  return g;
+  wrap.appendChild(list);
+  return wrap;
 }
 
 /* ---------- info / findings explorer ---------- */

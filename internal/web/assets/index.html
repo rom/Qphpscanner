@@ -163,16 +163,22 @@
        <div class="grid2">
          <div>
            <label for="cmp-a">Scan A (baseline / older)</label>
-           <select id="cmp-a"></select>
+           <select id="cmp-a" title="Pick a retained scan as the baseline, or load a saved JSON/XML scan file below"></select>
+           <p class="hint">
+             <label for="cmp-file" class="file-btn" title="Load a saved scan output (JSON or XML) to use as the baseline">Load saved scan (JSON/XML)…</label>
+             <input type="file" id="cmp-file" accept=".json,.xml,application/json,application/xml,text/xml" hidden>
+             <span id="cmp-file-name"></span>
+             <button type="button" id="cmp-file-clear" class="link-btn hidden" title="Use a retained scan instead">clear</button>
+           </p>
          </div>
          <div>
            <label for="cmp-b">Scan B (compare / newer)</label>
-           <select id="cmp-b"></select>
+           <select id="cmp-b" title="The scan to compare the baseline against"></select>
          </div>
        </div>
        <div class="btn-row">
-         <button type="button" id="cmp-run" class="primary">Compare</button>
-         <button type="button" id="cmp-refresh" class="secondary">Refresh list</button>
+         <button type="button" id="cmp-run" class="primary" title="Show what changed between the two scans">Compare</button>
+         <button type="button" id="cmp-refresh" class="secondary" title="Reload the list of retained scans">Refresh list</button>
        </div>
        <div id="cmp-result"></div>
      </section>
