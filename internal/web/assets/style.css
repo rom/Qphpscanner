@@ -120,6 +120,7 @@ details.advanced > summary { cursor: pointer; font-size: .82rem; color: var(--ac
 .diff-group > h4 { margin: 0 0 6px; font-size: .9rem; }
 .diff-added { color: var(--green); }
 .diff-removed { color: var(--red); }
+.diff-note { color: var(--accent-2); }
 .svc-dns { font-size: .76rem; color: var(--text-dim); font-family: ui-monospace, Menlo, Consolas, monospace; margin: 2px 0 0; word-break: break-all; }
 
 /* results sub-tabs (Results / PHP / Failures) */

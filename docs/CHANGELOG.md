@@ -8,6 +8,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Coverage-aware scan diffing:** a comparison now distinguishes a finding
+  that genuinely went away (the endpoint was reassessed) from one that could
+  not be re-checked — a timeout, WAF challenge, auth requirement, or a
+  host/port the newer scan never covered is reported as *not reassessed*, and
+  absent findings there are no longer claimed as *resolved*. Diffs also carry
+  *provenance notes* flagging when the two scans ran under different settings
+  (mode, ports, TLS, timeout, auth, connection pinning, catalogue size), to
+  separate scanner/config changes from real website changes. Scans saved before
+  this (no provenance metadata) still diff cleanly. Surfaced in JSON, the CLI
+  `--diff`, and the web Compare / Origin-check views.
 - **Connection pinning + origin comparison:** `--resolve HOST:PORT:ADDR`
   (curl-style) dials a specific address while keeping the URL host for the Host
   header and TLS SNI, and `--sni NAME` overrides the TLS SNI independently — so

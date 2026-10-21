@@ -21,7 +21,10 @@ type ScanResult struct {
 	Summary Summary        `json:"summary" xml:"summary"`
 }
 
-// Meta records how and when the scan was run.
+// Meta records how and when the scan was run. The provenance fields (TLSMode
+// through CatalogCMS) capture the result-affecting settings and catalogue sizes
+// so a diff can tell a real website change from a scanner/config change. They
+// are omitempty and absent from scans produced before they existed.
 type Meta struct {
 	Tool       string    `json:"tool" xml:"tool"`
 	Version    string    `json:"version" xml:"version"`
@@ -30,6 +33,16 @@ type Meta struct {
 	FinishedAt time.Time `json:"finished_at" xml:"finished_at"`
 	DurationMS int64     `json:"duration_ms" xml:"duration_ms"`
 	Ports      []int     `json:"ports" xml:"ports>port"`
+
+	TLSMode    string `json:"tls_mode,omitempty" xml:"tls_mode,omitempty"`
+	TimeoutMS  int64  `json:"timeout_ms,omitempty" xml:"timeout_ms,omitempty"`
+	Follow     bool   `json:"follow,omitempty" xml:"follow,omitempty"`
+	Insecure   bool   `json:"insecure,omitempty" xml:"insecure,omitempty"`
+	Auth       bool   `json:"auth,omitempty" xml:"auth,omitempty"`
+	Pinned     bool   `json:"pinned,omitempty" xml:"pinned,omitempty"`
+	AllowBlock bool   `json:"allow_block,omitempty" xml:"allow_block,omitempty"`
+	CatalogPHP int    `json:"catalog_php,omitempty" xml:"catalog_php,omitempty"`
+	CatalogCMS int    `json:"catalog_cms,omitempty" xml:"catalog_cms,omitempty"`
 }
 
 // Summary holds roll-up counts for quick triage.

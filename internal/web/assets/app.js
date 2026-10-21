@@ -1219,8 +1219,20 @@ async function runOriginCompare() {
 }
 
 function renderDiff(out, diff) {
-  if (!diff || (!(diff.added_services || []).length && !(diff.removed_services || []).length && !(diff.changed || []).length)) {
-    out.appendChild(el("p", "empty", "No differences between the two scans."));
+  const notes = (diff && diff.provenance_notes) || [];
+  if (notes.length) {
+    const g = el("div", "diff-group");
+    g.appendChild(el("h4", "diff-note", "Scans differ in how they were run — results may differ for this reason:"));
+    const ul = el("ul", "item-list");
+    for (const n of notes) ul.appendChild(el("li", null, n));
+    g.appendChild(ul);
+    out.appendChild(g);
+  }
+  const notReassessed = (diff && diff.not_reassessed) || [];
+  if (!diff || (!(diff.added_services || []).length && !(diff.removed_services || []).length &&
+      !(diff.changed || []).length && !notReassessed.length)) {
+    out.appendChild(el("p", "empty",
+      notes.length ? "No per-service differences between the two scans." : "No differences between the two scans."));
     return;
   }
   const list = (title, cls, urls) => {
@@ -1233,7 +1245,19 @@ function renderDiff(out, diff) {
     out.appendChild(g);
   };
   list("Added services", "diff-added", diff.added_services);
-  list("Removed services", "diff-removed", diff.removed_services);
+  list("Gone services (reassessed, now closed)", "diff-removed", diff.removed_services);
+  if (notReassessed.length) {
+    const g = el("div", "diff-group");
+    g.appendChild(el("h4", "diff-note", `Not reassessed — absent findings NOT treated as resolved (${notReassessed.length})`));
+    const ul = el("ul", "item-list");
+    for (const c of notReassessed) {
+      const li = el("li", null, c.url);
+      if (c.reason) li.appendChild(el("span", "when", c.reason));
+      ul.appendChild(li);
+    }
+    g.appendChild(ul);
+    out.appendChild(g);
+  }
   if ((diff.changed || []).length) {
     const g = el("div", "diff-group");
     g.appendChild(el("h4", null, `Changed (${diff.changed.length})`));
@@ -1241,10 +1265,12 @@ function renderDiff(out, diff) {
     for (const c of diff.changed) {
       const li = el("li", null, c.url);
       const bits = [];
+      if (c.coverage) bits.push("coverage: " + c.coverage);
       if (c.verdict_change) bits.push("verdict " + c.verdict_change);
       if (c.version_change) bits.push("version " + c.version_change);
       if ((c.new_vulns || []).length) bits.push("+vulns " + c.new_vulns.join(", "));
       if ((c.resolved_vulns || []).length) bits.push("-vulns " + c.resolved_vulns.join(", "));
+      if ((c.unconfirmed_vulns || []).length) bits.push("not reassessed " + c.unconfirmed_vulns.join(", "));
       if (bits.length) li.appendChild(el("span", "when", bits.join(" · ")));
       ul.appendChild(li);
     }

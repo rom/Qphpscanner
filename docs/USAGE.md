@@ -364,6 +364,17 @@ JSON result and prints what changed (new/gone services, version and verdict
 changes, new/resolved vulnerability leads). `--diff-format` is `text` (default)
 or `json`. With `--diff`, scan output is written only to an explicit `--out`.
 
+The diff is **coverage-aware**: an endpoint that the newer scan did not actually
+re-check — a timeout, a WAF challenge, an auth requirement, or a host/port it
+never covered — is reported as *not reassessed*, and findings that are merely
+absent there are **not** claimed as resolved. A finding only counts as resolved
+when its endpoint responded (or was reassessed and found closed). The diff also
+emits **provenance notes** when the two scans were run under different settings
+(mode, ports, TLS, timeout, auth, connection pinning, or vulnerability-catalogue
+size), so a result change caused by the scanner's configuration is not mistaken
+for a change on the site. Scans saved before this (no provenance metadata) still
+diff cleanly, without provenance notes.
+
 ## Resume
 
 `--resume FILE` records each completed service to FILE as it finishes. Re-run
