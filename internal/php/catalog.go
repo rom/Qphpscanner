@@ -28,15 +28,20 @@ type RangeSpec struct {
 	Introduced string `json:"introduced,omitempty"`
 	Fixed      string `json:"fixed,omitempty"`
 	LessThan   string `json:"lt,omitempty"`
+	// Equals matches a single exact version (used by discrete CSAF products).
+	Equals string `json:"eq,omitempty"`
 }
 
 func (r RangeSpec) empty() bool {
-	return r.Branch == "" && r.Introduced == "" && r.Fixed == "" && r.LessThan == ""
+	return r.Branch == "" && r.Introduced == "" && r.Fixed == "" && r.LessThan == "" && r.Equals == ""
 }
 
 func (r RangeSpec) matches(v string) bool {
 	if r.empty() {
 		return false
+	}
+	if r.Equals != "" {
+		return compareVersion(v, r.Equals) == 0
 	}
 	if r.Branch != "" {
 		maj, min, ok := parseBranch(r.Branch)
@@ -226,6 +231,8 @@ func affectedSummary(ranges []RangeSpec) string {
 	parts := make([]string, 0, len(ranges))
 	for _, r := range ranges {
 		switch {
+		case r.Equals != "":
+			parts = append(parts, "= "+r.Equals)
 		case r.Branch != "" && r.LessThan != "":
 			parts = append(parts, r.Branch+".x < "+r.LessThan)
 		case r.Branch != "" && r.Fixed != "":
@@ -243,16 +250,24 @@ func affectedSummary(ranges []RangeSpec) string {
 	return strings.Join(parts, ", ")
 }
 
-// ParseFeed decodes feed JSON and validates its schema.
+// ParseFeed decodes feed JSON, auto-detecting the native qphpscanner schema,
+// the OSV format (single record or array) and CSAF 2.0 advisories.
 func ParseFeed(data []byte) (*VulnFeed, error) {
-	var f VulnFeed
-	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("parse vuln feed: %w", err)
+	switch detectFeedFormat(data) {
+	case feedOSV:
+		return convertOSV(data)
+	case feedCSAF:
+		return convertCSAF(data)
+	default:
+		var f VulnFeed
+		if err := json.Unmarshal(data, &f); err != nil {
+			return nil, fmt.Errorf("parse vuln feed: %w", err)
+		}
+		if f.Schema != "" && f.Schema != FeedSchema {
+			return nil, fmt.Errorf("unsupported vuln feed schema %q (want %q, or an OSV/CSAF document)", f.Schema, FeedSchema)
+		}
+		return &f, nil
 	}
-	if f.Schema != "" && f.Schema != FeedSchema {
-		return nil, fmt.Errorf("unsupported vuln feed schema %q (want %q)", f.Schema, FeedSchema)
-	}
-	return &f, nil
 }
 
 // LoadFeed reads a feed from a local file path or an http(s) URL.
