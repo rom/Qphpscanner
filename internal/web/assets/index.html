@@ -19,10 +19,10 @@
   </header>
 
   <nav class="tabs" role="tablist">
-    <button type="button" class="tab active" data-view="scan" role="tab">Scan</button>
-    <button type="button" class="tab" data-view="compare" role="tab">Compare</button>
-    <button type="button" class="tab" data-view="stats" role="tab">Statistics</button>
-    <button type="button" class="tab" data-view="info" role="tab">Info</button>
+    <button type="button" class="tab active" data-view="scan" role="tab" title="Configure and run a scan; browse live results">Scan</button>
+    <button type="button" class="tab" data-view="compare" role="tab" title="Diff any two saved scans (or an older scan against the latest)">Compare</button>
+    <button type="button" class="tab" data-view="stats" role="tab" title="Statistics aggregated across all retained scans">Statistics</button>
+    <button type="button" class="tab" data-view="info" role="tab" title="Browse every framework, addon and vulnerability as clickable tags">Info</button>
   </nav>
 
   <main>
@@ -38,32 +38,32 @@
             <button type="button" id="targets-clear" class="link-btn" title="Clear the target list">clear</button>
           </div>
         </div>
-        <textarea id="targets" rows="4" placeholder="example.com&#10;https://example.org/app.php&#10;10.0.0.0/24&#10;192.168.1.1-20&#10;2001:db8::1"></textarea>
+        <textarea id="targets" rows="4" title="One target per line or comma-separated: a URL, IPv4/IPv6 address, CIDR block, 1.2.3.4-9 range, 1.2.3.* wildcard, or *.domain (enumerated via Certificate Transparency)" placeholder="example.com&#10;https://example.org/app.php&#10;10.0.0.0/24&#10;192.168.1.1-20&#10;2001:db8::1"></textarea>
         <p class="hint">One per line (or comma separated): URL, IPv4/IPv6, CIDR, 1.2.3.4-9 range, or 1.2.3.* wildcard. Loading a file appends its lines; '#' comments and blanks are skipped.</p>
 
         <div class="grid2">
           <div>
             <label for="ports">Ports</label>
-            <input id="ports" type="text" placeholder="80,443,8000-8010">
+            <input id="ports" type="text" title="Ports to scan: single, comma lists and ranges may be mixed (e.g. 80,443,8000-8100). Blank uses the common web-port set." placeholder="80,443,8000-8010">
             <p class="hint">Blank = common web ports.</p>
           </div>
           <div>
             <label for="concurrency">Concurrency</label>
-            <input id="concurrency" type="number" min="1" max="500" value="50">
+            <input id="concurrency" type="number" min="1" max="500" value="50" title="Maximum service probes in flight at once across the whole scan">
           </div>
         </div>
 
         <div class="grid2">
           <div>
             <label for="mode">Depth</label>
-            <select id="mode">
+            <select id="mode" title="detect = decide whether a service is PHP; deep = also fingerprint version, extensions/modules and correlate known vulnerabilities">
               <option value="detect">detect — is it PHP?</option>
               <option value="deep">deep — version, extensions, vulns</option>
             </select>
           </div>
           <div>
             <label for="tls">TLS</label>
-            <select id="tls">
+            <select id="tls" title="auto = infer from the port; on = force HTTPS; off = force HTTP">
               <option value="auto">auto (infer from port)</option>
               <option value="on">on (https)</option>
               <option value="off">off (http)</option>
@@ -74,22 +74,22 @@
         <div class="grid2">
           <div>
             <label for="timeout">Timeout (s)</label>
-            <input id="timeout" type="number" min="1" max="120" value="10">
+            <input id="timeout" type="number" min="1" max="120" value="10" title="Per-connection timeout in seconds">
           </div>
           <div class="checks">
-            <label class="check"><input type="checkbox" id="follow" checked> Follow redirects</label>
-            <label class="check"><input type="checkbox" id="securitytxt" checked> Fetch security.txt</label>
-            <label class="check"><input type="checkbox" id="insecure"> Ignore TLS errors</label>
-            <label class="check"><input type="checkbox" id="includeclosed"> Show closed ports</label>
-            <label class="check"><input type="checkbox" id="resolvedns"> Resolve DNS (A/PTR)</label>
-            <label class="check"><input type="checkbox" id="banners"> Grab service banners</label>
+            <label class="check" title="Follow HTTP redirects while collecting evidence"><input type="checkbox" id="follow" checked> Follow redirects</label>
+            <label class="check" title="Look up and parse /.well-known/security.txt (RFC 9116)"><input type="checkbox" id="securitytxt" checked> Fetch security.txt</label>
+            <label class="check" title="Do not verify TLS certificates (for self-signed scan targets)"><input type="checkbox" id="insecure"> Ignore TLS errors</label>
+            <label class="check" title="Include closed/filtered ports in the downloadable output"><input type="checkbox" id="includeclosed"> Show closed ports</label>
+            <label class="check" title="Resolve forward (A/AAAA) and reverse (PTR) DNS for each host"><input type="checkbox" id="resolvedns"> Resolve DNS (A/PTR)</label>
+            <label class="check" title="Grab a short banner from open ports that do not speak HTTP"><input type="checkbox" id="banners"> Grab service banners</label>
           </div>
         </div>
 
         <div class="grid2">
           <div>
             <label for="hostconc">Host concurrency</label>
-            <input id="hostconc" type="number" min="0" max="500" value="0" title="0 = no host-level cap">
+            <input id="hostconc" type="number" min="0" max="500" value="0" title="Maximum distinct hosts scanned at once (0 = no host-level cap)">
           </div>
           <div></div>
         </div>
@@ -104,8 +104,8 @@
         </details>
 
         <div class="btn-row">
-          <button type="submit" id="scan-btn" class="primary">Scan</button>
-          <button type="button" id="cancel-btn" class="secondary hidden">Cancel</button>
+          <button type="submit" id="scan-btn" class="primary" title="Start the scan">Scan</button>
+          <button type="button" id="cancel-btn" class="secondary hidden" title="Stop the scan — results collected so far are kept">Cancel</button>
         </div>
         <span id="status" class="status" role="status"></span>
       </form>
@@ -134,9 +134,16 @@
       <div id="summary" class="summary"></div>
       <div id="scan-error" class="scan-error hidden" role="alert"></div>
       <div id="result-tabs" class="result-tabs hidden">
-        <button type="button" class="rtab active" data-rtab="ok">Results <span id="ok-count" class="rtab-count">0</span></button>
-        <button type="button" class="rtab" data-rtab="php">PHP <span id="php-count" class="rtab-count">0</span></button>
-        <button type="button" class="rtab" data-rtab="fail">Failures <span id="fail-count" class="rtab-count">0</span></button>
+        <button type="button" class="rtab active" data-rtab="ok" title="Services that responded over HTTP">Results <span id="ok-count" class="rtab-count">0</span></button>
+        <button type="button" class="rtab" data-rtab="php" title="Only services classified as PHP (any positive verdict)">PHP <span id="php-count" class="rtab-count">0</span></button>
+        <button type="button" class="rtab" data-rtab="fail" title="Closed/filtered ports, connection errors, timeouts and open non-HTTP ports">Failures <span id="fail-count" class="rtab-count">0</span></button>
+        <span class="sort-wrap">
+          <label for="sort" class="sort-label">Sort</label>
+          <select id="sort" class="sort-select" title="Order the Results and PHP tabs: keep the order services were scanned, or bring PHP services (highest confidence first) to the top">
+            <option value="scan">Scan order</option>
+            <option value="php">PHP first</option>
+          </select>
+        </span>
       </div>
       <div id="results" class="resizable"></div>
       <div id="php-results" class="resizable hidden"></div>

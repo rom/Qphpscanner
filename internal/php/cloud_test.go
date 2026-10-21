@@ -71,3 +71,39 @@ func TestPHPImpliedGatingNonPHPServer(t *testing.T) {
 		t.Error("cPanel-only response should not be classified as PHP")
 	}
 }
+
+func TestMagentoVersionAndVuln(t *testing.T) {
+	in := Input{
+		TargetURL: "http://h/",
+		Deep:      true,
+		Root:      resp(200, map[string]string{"X-Magento-Cache-Debug": "MISS"}, nil, `<script type="text/x-magento-init">{}</script>`),
+		Extra:     map[string]*probe.Response{"http://h/magento_version": resp(200, nil, nil, "Magento/2.4.3 (Community)")},
+	}
+	d := Analyze(in)
+	if !hasStr(d.Frameworks, "Magento") {
+		t.Fatalf("Magento not detected: %v", d.Frameworks)
+	}
+	if d.FrameworkVersions["Magento"] != "2.4.3" {
+		t.Errorf("Magento version = %q, want 2.4.3", d.FrameworkVersions["Magento"])
+	}
+	if !hasVuln(d, "CVE-2022-24086") || !hasVuln(d, "CVE-2024-34102") {
+		t.Errorf("expected Magento CVEs for 2.4.3, got %v", vulnIDs(d))
+	}
+}
+
+func TestDrupalMarkers(t *testing.T) {
+	d := Analyze(Input{
+		TargetURL: "http://h/",
+		Root: resp(200, map[string]string{"X-Generator": "Drupal 10 (https://www.drupal.org)"}, nil,
+			`<script>drupalSettings = {};</script><link href="/core/misc/drupal.js">`),
+	})
+	if !hasStr(d.Frameworks, "Drupal") {
+		t.Fatalf("Drupal not detected: %v", d.Frameworks)
+	}
+	if d.FrameworkVersions["Drupal"] != "10" {
+		t.Errorf("Drupal version = %q, want 10", d.FrameworkVersions["Drupal"])
+	}
+	if !d.IsPHP {
+		t.Errorf("Drupal should classify as PHP (conf %d)", d.Confidence)
+	}
+}

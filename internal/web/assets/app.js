@@ -83,9 +83,16 @@ for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => showView(tab.dataset.view));
 }
 
-// Results / Failures sub-tabs inside the Scan view.
+// Results / PHP / Failures sub-tabs inside the Scan view.
 for (const rt of document.querySelectorAll(".rtab")) {
   rt.addEventListener("click", () => showResultTab(rt.dataset.rtab));
+}
+const sortEl = $("sort");
+if (sortEl) {
+  sortEl.addEventListener("change", () => {
+    sortMode = sortEl.value;
+    resortResults();
+  });
 }
 function showResultTab(which) {
   for (const rt of document.querySelectorAll(".rtab")) {
@@ -301,21 +308,25 @@ function setStatus(msg, isError) {
 // and survive an error/timeout instead of being wiped.
 let scanRender = null;
 
+let sortMode = "scan";
+
 function beginScanRender() {
   scanRender = {
     pendingClear: true,
-    okGroups: new Map(),
-    phpGroups: new Map(),
-    failGroups: new Map(),
-    ok: 0,
-    php: 0,
-    fail: 0,
+    okList: [],
+    phpList: [],
+    failList: [],
+    hostDNS: {},
   };
 }
 
 // isPHPResult marks a service classified as PHP (any positive verdict).
 function isPHPResult(svc) {
   return !!(svc && svc.php && svc.php.verdict && svc.php.verdict !== "none");
+}
+
+function dnsFor(svc) {
+  return (scanRender && scanRender.hostDNS[svc.host]) || null;
 }
 
 // ensureCleared wipes the pane exactly once — when the first new service (or a
@@ -328,12 +339,9 @@ function ensureCleared() {
   phpResultsEl.replaceChildren();
   failuresEl.replaceChildren();
   summaryEl.replaceChildren();
-  scanRender.okGroups.clear();
-  scanRender.phpGroups.clear();
-  scanRender.failGroups.clear();
-  scanRender.ok = 0;
-  scanRender.php = 0;
-  scanRender.fail = 0;
+  scanRender.okList = [];
+  scanRender.phpList = [];
+  scanRender.failList = [];
   resultTabsEl.classList.remove("hidden");
   updateResultCounts();
 }
@@ -345,33 +353,55 @@ function isProductive(svc) {
   return !!(svc && svc.port_open && svc.http);
 }
 
-// appendToBucket renders a card for svc into the given container/group map,
-// grouping by host.
-function appendToBucket(container, groups, svc) {
-  let group = groups.get(svc.host);
-  if (!group) {
-    group = renderHostHeader(svc.host);
-    groups.set(svc.host, group);
-    container.appendChild(group.el);
-  }
-  group.body.appendChild(renderService(svc, null));
-}
-
 function onServiceMsg(svc) {
   if (!svc) return;
   ensureCleared();
   if (isProductive(svc)) {
-    appendToBucket(resultsEl, scanRender.okGroups, svc);
-    scanRender.ok++;
+    scanRender.okList.push(svc);
+    renderBucket(resultsEl, scanRender.okList, sortMode);
     if (isPHPResult(svc)) {
-      appendToBucket(phpResultsEl, scanRender.phpGroups, svc);
-      scanRender.php++;
+      scanRender.phpList.push(svc);
+      renderBucket(phpResultsEl, scanRender.phpList, sortMode);
     }
   } else {
-    appendToBucket(failuresEl, scanRender.failGroups, svc);
-    scanRender.fail++;
+    scanRender.failList.push(svc);
+    renderBucket(failuresEl, scanRender.failList, "scan");
   }
   updateResultCounts();
+}
+
+// renderBucket (re)draws a container from its service array. "scan" order
+// groups by host in the order seen; "php" flattens with PHP services (highest
+// confidence first) on top.
+function renderBucket(container, list, mode) {
+  container.replaceChildren();
+  if (mode === "php") {
+    const ordered = list
+      .map((s, i) => ({ s, i }))
+      .sort((a, b) => {
+        const pa = isPHPResult(a.s) ? 0 : 1;
+        const pb = isPHPResult(b.s) ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        const ca = a.s.php ? a.s.php.confidence : 0;
+        const cb = b.s.php ? b.s.php.confidence : 0;
+        if (ca !== cb) return cb - ca;
+        return a.i - b.i;
+      })
+      .map((x) => x.s);
+    for (const svc of ordered) container.appendChild(renderService(svc, dnsFor(svc)));
+    return;
+  }
+  // scan order, grouped by host
+  const groups = new Map();
+  for (const svc of list) {
+    let g = groups.get(svc.host);
+    if (!g) {
+      g = renderHostHeader(svc.host);
+      groups.set(svc.host, g);
+      container.appendChild(g.el);
+    }
+    g.body.appendChild(renderService(svc, dnsFor(svc)));
+  }
 }
 
 function renderHostHeader(host) {
@@ -383,9 +413,17 @@ function renderHostHeader(host) {
 }
 
 function updateResultCounts() {
-  okCountEl.textContent = String(scanRender ? scanRender.ok : 0);
-  phpCountEl.textContent = String(scanRender ? scanRender.php : 0);
-  failCountEl.textContent = String(scanRender ? scanRender.fail : 0);
+  okCountEl.textContent = String(scanRender ? scanRender.okList.length : 0);
+  phpCountEl.textContent = String(scanRender ? scanRender.phpList.length : 0);
+  failCountEl.textContent = String(scanRender ? scanRender.failList.length : 0);
+}
+
+// resortResults re-renders the Results and PHP tabs when the sort control
+// changes.
+function resortResults() {
+  if (!scanRender || scanRender.pendingClear) return;
+  renderBucket(resultsEl, scanRender.okList, sortMode);
+  renderBucket(phpResultsEl, scanRender.phpList, sortMode);
 }
 
 // finishScanRender runs on a successful result: it re-renders the Results tab
@@ -394,31 +432,27 @@ function updateResultCounts() {
 function finishScanRender(result) {
   ensureCleared();
   renderSummary(result.summary);
-  // Re-render the Results and PHP tabs from the final result so resolved
-  // A/PTR records appear; the streamed Failures tab is left in place.
-  resultsEl.replaceChildren();
-  phpResultsEl.replaceChildren();
-  let ok = 0;
-  let php = 0;
+  // Rebuild the Results/PHP arrays from the final result so resolved A/PTR
+  // records are available; keep the streamed Failures tab.
+  scanRender.okList = [];
+  scanRender.phpList = [];
   for (const t of result.targets || []) {
-    const prod = (t.services || []).filter(isProductive);
-    if (prod.length) {
-      resultsEl.appendChild(renderHost(Object.assign({}, t, { services: prod })));
-      ok += prod.length;
+    if ((t.addresses && t.addresses.length) || (t.ptr && t.ptr.length)) {
+      scanRender.hostDNS[t.host] = { addresses: t.addresses, ptr: t.ptr };
     }
-    const phpOnly = prod.filter(isPHPResult);
-    if (phpOnly.length) {
-      phpResultsEl.appendChild(renderHost(Object.assign({}, t, { services: phpOnly })));
-      php += phpOnly.length;
+    for (const svc of t.services || []) {
+      if (!isProductive(svc)) continue;
+      scanRender.okList.push(svc);
+      if (isPHPResult(svc)) scanRender.phpList.push(svc);
     }
   }
-  scanRender.ok = ok;
-  scanRender.php = php;
+  renderBucket(resultsEl, scanRender.okList, sortMode);
+  renderBucket(phpResultsEl, scanRender.phpList, sortMode);
   updateResultCounts();
-  if (scanRender.ok === 0 && scanRender.fail === 0) {
+  if (scanRender.okList.length === 0 && scanRender.failList.length === 0) {
     resultsEl.appendChild(el("p", "empty", "No open services found."));
   }
-  if (php === 0) {
+  if (scanRender.phpList.length === 0) {
     phpResultsEl.appendChild(el("p", "empty", "No PHP services detected."));
   }
 }
@@ -488,9 +522,15 @@ function renderService(svc, target) {
   const head = el("div", "svc-head");
   head.appendChild(el("span", "svc-url", svc.url || (svc.host + ":" + svc.port)));
   if (svc.php) {
-    head.appendChild(el("span", "badge " + verdict, "PHP: " + verdict + " (" + svc.php.confidence + ")"));
+    const badge = el("span", "badge " + verdict, "PHP: " + verdict + " (" + svc.php.confidence + ")");
+    badge.title =
+      "Verdict from a weighted confidence score (0–100): confirmed ≥70, likely ≥50, " +
+      "possible ≥25, none <25. This service scored " + svc.php.confidence + ".";
+    head.appendChild(badge);
   } else if (!svc.port_open) {
-    head.appendChild(el("span", "badge none", "closed"));
+    const b = el("span", "badge none", "closed");
+    b.title = "The port was closed or filtered (no service answered).";
+    head.appendChild(b);
   }
   card.appendChild(head);
 
@@ -605,7 +645,9 @@ function renderVulns(vulns) {
   const ul = el("ul", "vulnlist");
   for (const v of vulns) {
     const li = el("li");
-    li.appendChild(el("span", "sev " + (v.severity || "low"), (v.severity || "").toUpperCase()));
+    const sev = el("span", "sev " + (v.severity || "low"), (v.severity || "").toUpperCase());
+    sev.title = "Severity of this version-correlated lead (informational, not a confirmed finding).";
+    li.appendChild(sev);
     li.appendChild(document.createTextNode(v.id + " — " + v.title));
     li.appendChild(el("div", "note", "affects " + v.affected_versions + " · " + v.match_basis));
     ul.appendChild(li);
@@ -621,8 +663,14 @@ function renderEvidence(evidence) {
   const ul = el("ul", "evlist");
   for (const ev of evidence) {
     const li = el("li");
-    li.appendChild(el("span", "ev-weight", String(ev.weight)));
-    if (ev.confidence) li.appendChild(el("span", "sev " + evSev(ev.confidence), ev.confidence));
+    const w = el("span", "ev-weight", String(ev.weight));
+    w.title = "Confidence points this signal contributed to the PHP score (0 = detected but not PHP-indicative).";
+    li.appendChild(w);
+    if (ev.confidence) {
+      const tier = el("span", "sev " + evSev(ev.confidence), ev.confidence);
+      tier.title = "Signal-strength tier derived from its weight.";
+      li.appendChild(tier);
+    }
     li.appendChild(document.createTextNode(" " + ev.signal + " — " + ev.detail));
     const meta = [];
     if (ev.where) meta.push("where: " + ev.where);

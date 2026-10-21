@@ -217,7 +217,9 @@ The GUI has four tabs:
   (only services classified as PHP), and **Failures** (closed or filtered
   ports, connection errors, timeouts, open non-HTTP ports). If a scan errors,
   times out or is **cancelled**, whatever was collected so far stays on
-  screen — it is never wiped — and a banner explains what happened.
+  screen — it is never wiped — and a banner explains what happened. A **sort**
+  control orders the Results and PHP tabs by scan order or with PHP services
+  (highest confidence first) on top. Most controls have **mouse-over help**.
 - **Compare** — pick any two retained scans (or an older one against the
   latest) and see added/removed services and per-service verdict, version and
   vulnerability changes.
