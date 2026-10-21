@@ -275,7 +275,7 @@ func analyzeResponse(
 				}
 				addEv(Evidence{
 					Signal: "header." + strings.ToLower(sig.header),
-					Source: source, Weight: sig.weight, Detail: sig.detail, Data: val,
+					Source: source, Weight: phpWeight(sig.weight, sig.phpImplied, sig.variant), Detail: sig.detail, Data: val,
 					Where: "response header '" + sig.header + "'", How: how,
 					Pattern: sig.contains, Snippet: sig.header + ": " + val, Probe: source,
 				})
@@ -340,7 +340,7 @@ func analyzeResponse(
 			if loc := sig.re.FindStringIndex(body); loc != nil {
 				snippet, line := bodyContext(body, loc[0], loc[1])
 				addEv(Evidence{
-					Signal: sig.id, Source: source, Weight: sig.weight,
+					Signal: sig.id, Source: source, Weight: phpWeight(sig.weight, sig.phpImplied, ""),
 					Detail: sig.detail, Data: collapseWS(body[loc[0]:loc[1]]),
 					Where: "response body", How: "regular expression",
 					Pattern: sig.re.String(), Snippet: snippet, Line: line, Probe: source,
@@ -569,10 +569,24 @@ func detectStatusDashboards(url, body string, addEv func(Evidence), addExt, addF
 		addMod("php-fpm")
 		addEv(Evidence{Signal: "diag.fpm-status", Source: url, Weight: 40, Detail: "PHP-FPM status page exposed"})
 	}
-	// Nextcloud / ownCloud status.php.
+	// Nextcloud / ownCloud / OpenCloud status.php.
 	if strings.HasSuffix(lu, "status.php") && containsFold(body, "\"installed\"") && containsFold(body, "\"version\"") {
-		addFw("Nextcloud/ownCloud")
-		addEv(Evidence{Signal: "diag.nextcloud-status", Source: url, Weight: 40, Detail: "Nextcloud/ownCloud status.php exposed"})
+		prod := "Nextcloud/ownCloud"
+		phpCloud := true
+		if m := reCloudProduct.FindStringSubmatch(body); m != nil && m[1] != "" {
+			if c := canonCloud(m[1]); c != "" {
+				prod = c
+			} else {
+				prod = m[1] // e.g. OpenCloud / Infinite Scale (Go backend)
+				phpCloud = false
+			}
+		}
+		addFw(prod)
+		w := 45
+		if !phpCloud {
+			w = 0 // detected, but a non-PHP backend must not boost PHP confidence
+		}
+		addEv(Evidence{Signal: "diag.nextcloud-status", Source: url, Weight: w, Detail: prod + " status.php exposed (version/edition disclosed)"})
 	}
 }
 
@@ -650,6 +664,16 @@ func provenanceDefaults(signal string) (where, how string) {
 	default:
 		return "response", "heuristic"
 	}
+}
+
+// phpWeight gates a signature's confidence contribution: a signature that does
+// not imply PHP (e.g. a Go-based app, or a generic web-server marker) still
+// records its framework and evidence, but adds 0 to the PHP confidence score.
+func phpWeight(weight int, phpImplied bool, variant string) int {
+	if phpImplied || variant != "" {
+		return weight
+	}
+	return 0
 }
 
 func contains(haystack, needle string) bool { return strings.Contains(haystack, needle) }

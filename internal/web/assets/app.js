@@ -13,9 +13,11 @@ const scanBtn = $("scan-btn");
 const cancelBtn = $("cancel-btn");
 const summaryEl = $("summary");
 const resultsEl = $("results");
+const phpResultsEl = $("php-results");
 const failuresEl = $("failures");
 const resultTabsEl = $("result-tabs");
 const okCountEl = $("ok-count");
+const phpCountEl = $("php-count");
 const failCountEl = $("fail-count");
 const scanErrorEl = $("scan-error");
 const downloadsEl = $("downloads");
@@ -90,6 +92,7 @@ function showResultTab(which) {
     rt.classList.toggle("active", rt.dataset.rtab === which);
   }
   resultsEl.classList.toggle("hidden", which !== "ok");
+  phpResultsEl.classList.toggle("hidden", which !== "php");
   failuresEl.classList.toggle("hidden", which !== "fail");
 }
 
@@ -299,7 +302,20 @@ function setStatus(msg, isError) {
 let scanRender = null;
 
 function beginScanRender() {
-  scanRender = { pendingClear: true, okGroups: new Map(), failGroups: new Map(), ok: 0, fail: 0 };
+  scanRender = {
+    pendingClear: true,
+    okGroups: new Map(),
+    phpGroups: new Map(),
+    failGroups: new Map(),
+    ok: 0,
+    php: 0,
+    fail: 0,
+  };
+}
+
+// isPHPResult marks a service classified as PHP (any positive verdict).
+function isPHPResult(svc) {
+  return !!(svc && svc.php && svc.php.verdict && svc.php.verdict !== "none");
 }
 
 // ensureCleared wipes the pane exactly once — when the first new service (or a
@@ -309,11 +325,14 @@ function ensureCleared() {
   if (!scanRender || !scanRender.pendingClear) return;
   scanRender.pendingClear = false;
   resultsEl.replaceChildren();
+  phpResultsEl.replaceChildren();
   failuresEl.replaceChildren();
   summaryEl.replaceChildren();
   scanRender.okGroups.clear();
+  scanRender.phpGroups.clear();
   scanRender.failGroups.clear();
   scanRender.ok = 0;
+  scanRender.php = 0;
   scanRender.fail = 0;
   resultTabsEl.classList.remove("hidden");
   updateResultCounts();
@@ -326,12 +345,9 @@ function isProductive(svc) {
   return !!(svc && svc.port_open && svc.http);
 }
 
-function onServiceMsg(svc) {
-  if (!svc) return;
-  ensureCleared();
-  const ok = isProductive(svc);
-  const container = ok ? resultsEl : failuresEl;
-  const groups = ok ? scanRender.okGroups : scanRender.failGroups;
+// appendToBucket renders a card for svc into the given container/group map,
+// grouping by host.
+function appendToBucket(container, groups, svc) {
   let group = groups.get(svc.host);
   if (!group) {
     group = renderHostHeader(svc.host);
@@ -339,8 +355,22 @@ function onServiceMsg(svc) {
     container.appendChild(group.el);
   }
   group.body.appendChild(renderService(svc, null));
-  if (ok) scanRender.ok++;
-  else scanRender.fail++;
+}
+
+function onServiceMsg(svc) {
+  if (!svc) return;
+  ensureCleared();
+  if (isProductive(svc)) {
+    appendToBucket(resultsEl, scanRender.okGroups, svc);
+    scanRender.ok++;
+    if (isPHPResult(svc)) {
+      appendToBucket(phpResultsEl, scanRender.phpGroups, svc);
+      scanRender.php++;
+    }
+  } else {
+    appendToBucket(failuresEl, scanRender.failGroups, svc);
+    scanRender.fail++;
+  }
   updateResultCounts();
 }
 
@@ -354,6 +384,7 @@ function renderHostHeader(host) {
 
 function updateResultCounts() {
   okCountEl.textContent = String(scanRender ? scanRender.ok : 0);
+  phpCountEl.textContent = String(scanRender ? scanRender.php : 0);
   failCountEl.textContent = String(scanRender ? scanRender.fail : 0);
 }
 
@@ -363,18 +394,32 @@ function updateResultCounts() {
 function finishScanRender(result) {
   ensureCleared();
   renderSummary(result.summary);
+  // Re-render the Results and PHP tabs from the final result so resolved
+  // A/PTR records appear; the streamed Failures tab is left in place.
   resultsEl.replaceChildren();
+  phpResultsEl.replaceChildren();
   let ok = 0;
+  let php = 0;
   for (const t of result.targets || []) {
     const prod = (t.services || []).filter(isProductive);
-    if (!prod.length) continue;
-    resultsEl.appendChild(renderHost(Object.assign({}, t, { services: prod })));
-    ok += prod.length;
+    if (prod.length) {
+      resultsEl.appendChild(renderHost(Object.assign({}, t, { services: prod })));
+      ok += prod.length;
+    }
+    const phpOnly = prod.filter(isPHPResult);
+    if (phpOnly.length) {
+      phpResultsEl.appendChild(renderHost(Object.assign({}, t, { services: phpOnly })));
+      php += phpOnly.length;
+    }
   }
   scanRender.ok = ok;
+  scanRender.php = php;
   updateResultCounts();
   if (scanRender.ok === 0 && scanRender.fail === 0) {
     resultsEl.appendChild(el("p", "empty", "No open services found."));
+  }
+  if (php === 0) {
+    phpResultsEl.appendChild(el("p", "empty", "No PHP services detected."));
   }
 }
 
