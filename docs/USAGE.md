@@ -358,6 +358,36 @@ Extend or override it with `--favicon-catalog FILE|URL` (repeatable); the file
 is `{"schema":"qphpscanner-favicon-catalog/1","favicons":[{"hash":"…",
 "product":"…","framework":"…","php":true}]}`. An unknown hash is simply inert.
 
+## Signature packs
+
+The built-in detection catalogues (response-header, cookie-name and
+response-body matchers) can be extended at run time with a **signature pack** —
+a versioned JSON document of the `qphpscanner-signature-pack/1` schema (see
+[`signature-pack.example.json`](signature-pack.example.json)):
+
+    qphpscanner --mode deep --signature-pack my-stack.json example.com
+
+`--signature-pack FILE|URL` is repeatable (config key `signature_packs`). A pack
+has an `id`, an optional `version`, and any of three matcher lists:
+
+- `headers` — `{header, contains?, framework?, php?, variant?, weight, detail?}`;
+  `contains` is a case-insensitive substring (omit it to match the header's mere
+  presence).
+- `cookies` — `{name, match?, framework?, weight, detail?}`; `match` is `exact`
+  (default) or `prefix`.
+- `bodies` — `{id, regex, framework?, php?, weight, detail?}`; `regex` is a
+  Go/RE2 regular expression.
+
+Packs are **bounded and validated** on load: an unknown schema, a missing `id`,
+an unparseable or over-length (> 512-byte) body regex, an unknown cookie `match`
+kind, or more than 500 entries in a category rejects the whole pack rather than
+loading it partially. Weights are clamped to 0–100 so no pack can swamp the
+evidence score, and RE2 runs in linear time (no catastrophic backtracking). The
+active packs (`id@version`) are recorded in the scan's provenance metadata, so a
+[diff](#diffing-scans) attributes a detection change to a loaded pack rather
+than to the target. A pack passed to `--web` at start-up applies to every scan
+the GUI runs.
+
 ## Composer dependency inventory
 
 In deep mode, an exposed `composer.json`, `composer.lock` or

@@ -102,6 +102,16 @@ func run(args []string) error {
 		return err
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// External detection-signature packs register into the global catalogues,
+	// so they are loaded before any scan — including before the web server
+	// begins serving them.
+	if err := loadSignaturePacks(ctx, f.signaturePacks); err != nil {
+		return err
+	}
+
 	// Web mode.
 	if webEnabled {
 		srv := web.NewServer(listen)
@@ -112,9 +122,6 @@ func run(args []string) error {
 		fmt.Fprintf(os.Stderr, "qphpscanner web UI listening on http://%s/\n", displayAddr(listen))
 		return srv.ListenAndServe()
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// Extra targets from a file or stdin.
 	fileTargets, err := readTargetsFile(f.targetsFile)
@@ -180,6 +187,20 @@ func run(args []string) error {
 
 	if f.failOn != "" && report.FailOn(result, f.failOn) {
 		return &exitError{code: 2}
+	}
+	return nil
+}
+
+// loadSignaturePacks registers every external detection-signature pack. Packs
+// merge their matchers into the global detection catalogues, so they take
+// effect for every subsequent scan in the process (CLI run or web server).
+func loadSignaturePacks(ctx context.Context, srcs []string) error {
+	for _, src := range srcs {
+		n, err := php.LoadSignaturePack(ctx, src, nil)
+		if err != nil {
+			return fmt.Errorf("load signature pack %q: %w", src, err)
+		}
+		fmt.Fprintf(os.Stderr, "loaded %d signature-pack matchers from %s\n", n, src)
 	}
 	return nil
 }
@@ -473,6 +494,7 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		// Feeds and catalogues from config run before any from the CLI.
 		f.vulnFeeds = append(stringSlice(cfg.VulnFeeds), f.vulnFeeds...)
 		f.faviconCatalogs = append(stringSlice(cfg.FaviconCatalogs), f.faviconCatalogs...)
+		f.signaturePacks = append(stringSlice(cfg.SignaturePacks), f.signaturePacks...)
 		f.composerFiles = append(stringSlice(cfg.ComposerFiles), f.composerFiles...)
 	}
 

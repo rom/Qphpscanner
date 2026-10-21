@@ -177,6 +177,14 @@ is set.
 Load a favicon-hash → product catalogue (JSON) to attribute matched site
 favicons. Repeatable.
 .TP
+.BI \-\-signature\-pack " file|url"
+Load a versioned detection-signature pack (JSON, schema
+\fBqphpscanner-signature-pack/1\fR) adding response-header, cookie-name and
+response-body matchers to the built-in catalogues. Regular expressions are
+length-bounded and validated; weights are clamped. The active packs are
+recorded in the scan's provenance metadata. Repeatable, and honoured by the
+web GUI when passed at start-up.
+.TP
 .BI \-\-composer\-file " file"
 Supply a local
 .IR composer.json ", " composer.lock " or " installed.json

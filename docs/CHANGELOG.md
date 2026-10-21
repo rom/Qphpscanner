@@ -8,6 +8,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Versioned signature packs:** the built-in detection catalogues can be
+  extended at run time with an external **signature pack** — a JSON document
+  (schema `qphpscanner-signature-pack/1`) adding response-header, cookie-name
+  and response-body (Go/RE2) matchers that behave exactly like the shipped
+  signatures. Loaded with `--signature-pack FILE|URL` (repeatable, config key
+  `signature_packs`, and honoured by the `--web` GUI at start-up). Packs are
+  bounded and validated on load — unknown schema, missing `id`, an unparseable
+  or over-length regex, an unknown cookie match kind, or too many entries
+  rejects the whole pack; weights are clamped to 0–100. The active packs
+  (`id@version`) are stamped into the scan's provenance metadata, so a diff can
+  attribute a detection change to a loaded pack rather than the target. See
+  [`docs/signature-pack.example.json`](signature-pack.example.json).
 - **Adaptive deep-mode discovery:** deep probing is now evidence-driven — after
   the base/core responses, an application's endpoints (WordPress, Joomla,
   Drupal, Laravel/Symfony, Magento) are requested only once that application is

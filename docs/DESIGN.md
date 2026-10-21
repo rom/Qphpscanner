@@ -39,7 +39,8 @@ internal/
                      feeds_import.go (OSV + CSAF importers), vulndb.go (built-in
                      data), cms.go (CMS version detection), favicon.go (mmh3
                      favicon hash), faviconcat.go (favicon-hash → product map),
-                     signatures*.go (header/cookie/body signature catalogues)
+                     signatures*.go (header/cookie/body signature catalogues),
+                     sigpack.go (runtime-loadable, versioned signature packs)
   securitytxt        RFC 9116 security.txt discovery and parsing
   webserver          web-server identification + reverse-proxy/CDN/WAF/LB detection
   dnsenum            subdomain discovery for "*.domain" via Certificate Transparency

@@ -116,6 +116,17 @@ func TestDiffProvenanceNotes(t *testing.T) {
 	}
 }
 
+func TestDiffProvenanceSignaturePacks(t *testing.T) {
+	old := oneScan(phpSvc("https://h/", 200))
+	nw := oneScan(phpSvc("https://h/", 200))
+	old.Meta = scanner.Meta{Mode: "deep", TLSMode: "auto", TimeoutMS: 10000}
+	nw.Meta = scanner.Meta{Mode: "deep", TLSMode: "auto", TimeoutMS: 10000, SignaturePacks: []string{"acme@1.2"}}
+	notes := strings.Join(Diff(old, nw).ProvenanceNotes, " | ")
+	if !strings.Contains(notes, "signature packs: none → acme@1.2") {
+		t.Errorf("missing signature-pack note: %q", notes)
+	}
+}
+
 func TestDiffNoProvenanceForOldScans(t *testing.T) {
 	// TimeoutMS == 0 on a side (older saved scan) → no provenance notes, and the
 	// coverage logic still resolves a genuinely reassessed-and-gone finding.

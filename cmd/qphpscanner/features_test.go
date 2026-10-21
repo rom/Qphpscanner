@@ -153,6 +153,26 @@ func TestRunVulnFeed(t *testing.T) {
 	}
 }
 
+func TestRunSignaturePack(t *testing.T) {
+	ts := phpServer()
+	defer ts.Close()
+	dir := t.TempDir()
+	pack := filepath.Join(dir, "pack.json")
+	_ = os.WriteFile(pack, []byte(`{"schema":"qphpscanner-signature-pack/1","id":"cli-pack","version":"1.0","headers":[{"header":"X-Cli-Pack","php":true,"weight":40,"detail":"cli pack header"}]}`), 0o644)
+	out := filepath.Join(dir, "o.json")
+	if err := run([]string{"--quiet", "--signature-pack", pack, "--format", "json", "--out", out, ts.URL}); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(out)
+	if !strings.Contains(string(data), "cli-pack@1.0") {
+		t.Fatal("signature-pack id should be stamped into scan meta")
+	}
+	// A broken pack is a hard error, not a silent skip.
+	if err := run([]string{"--quiet", "--signature-pack", "/no/such/pack.json", ts.URL}); err == nil {
+		t.Fatal("expected error for a missing signature pack")
+	}
+}
+
 func TestRunBadVulnFeed(t *testing.T) {
 	ts := phpServer()
 	defer ts.Close()

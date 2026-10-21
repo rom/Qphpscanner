@@ -1,0 +1,61 @@
+{
+  "schema": "qphpscanner-signature-pack/1",
+  "id": "example-stack",
+  "version": "2026.10.1",
+
+  "_comment": "An external detection-signature pack. Load with --signature-pack (repeatable), or list under signature_packs: in the config file. Its matchers are merged into the built-in catalogues, so they behave exactly like the shipped signatures: header/cookie matches add framework + PHP evidence, body matches run a Go/RE2 regexp over the response. Everything is passive, read-only fingerprinting. On load the pack is bounded and validated (schema, id, <=500 entries per list, <=512-byte regexes that must compile, exact|prefix cookie match); weights are clamped to 0-100. The id@version is stamped into the scan's provenance metadata.",
+
+  "headers": [
+    {
+      "header": "X-Powered-By",
+      "contains": "acmecms",
+      "framework": "AcmeCMS",
+      "php": true,
+      "weight": 60,
+      "detail": "AcmeCMS advertises itself in X-Powered-By"
+    },
+    {
+      "header": "X-Acme-Node",
+      "framework": "AcmeCMS",
+      "php": true,
+      "weight": 40,
+      "detail": "AcmeCMS cluster-node header (present at all)"
+    }
+  ],
+
+  "cookies": [
+    {
+      "name": "ACME_SESSID",
+      "match": "exact",
+      "framework": "AcmeCMS",
+      "weight": 55,
+      "detail": "AcmeCMS session cookie"
+    },
+    {
+      "name": "acme_remember_",
+      "match": "prefix",
+      "framework": "AcmeCMS",
+      "weight": 45,
+      "detail": "AcmeCMS remember-me cookie"
+    }
+  ],
+
+  "bodies": [
+    {
+      "id": "body.acme-generator",
+      "regex": "(?i)<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']AcmeCMS",
+      "framework": "AcmeCMS",
+      "php": true,
+      "weight": 50,
+      "detail": "AcmeCMS generator meta tag"
+    },
+    {
+      "id": "body.acme-runtime",
+      "regex": "(?i)/acme-engine/(assets|cache)/",
+      "framework": "AcmeCMS",
+      "php": true,
+      "weight": 45,
+      "detail": "AcmeCMS runtime asset paths"
+    }
+  ]
+}
