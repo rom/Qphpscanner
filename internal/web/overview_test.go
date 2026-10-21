@@ -98,6 +98,35 @@ func TestOverviewAndDiff(t *testing.T) {
 	}
 }
 
+func TestOverviewTopServers(t *testing.T) {
+	// A target that advertises nginx should show up in the web-server toplist.
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Server", "nginx/1.25.3")
+		w.Header().Set("X-Powered-By", "PHP/8.2.0")
+		http.SetCookie(w, &http.Cookie{Name: "PHPSESSID", Value: "x"})
+		_, _ = w.Write([]byte("<title>t</title>"))
+	}))
+	defer target.Close()
+
+	s := NewServer("x")
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	runScan(t, srv.URL, `{"targets":["`+target.URL+`"],"mode":"detect","tls":"off","security_txt":false}`)
+
+	var ov overview
+	getJSON(t, srv.URL+"/api/overview", &ov)
+	found := false
+	for _, e := range ov.Stats.TopServers {
+		if e.Key == "nginx" && e.Count >= 1 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("top_servers missing nginx: %+v", ov.Stats.TopServers)
+	}
+}
+
 func TestVersionEndpoint(t *testing.T) {
 	s := NewServer("x")
 	srv := httptest.NewServer(s.Handler())

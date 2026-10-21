@@ -322,6 +322,14 @@ func (f *Fetcher) do(ctx context.Context, method, rawURL string) *Response {
 	start := time.Now()
 	out := &Response{RequestURL: rawURL, Header: http.Header{}}
 
+	// Credentials and cookies are scoped to the original target host: a redirect
+	// to a different host must not carry them (they would otherwise leak to an
+	// unrelated origin — e.g. an SSO portal or an attacker-controlled redirect).
+	origHost := ""
+	if u, err := url.Parse(rawURL); err == nil {
+		origHost = strings.ToLower(u.Hostname())
+	}
+
 	cur := rawURL
 	seen := map[string]bool{}
 	for hop := 0; hop <= f.maxRedirects; hop++ {
@@ -333,19 +341,24 @@ func (f *Fetcher) do(ctx context.Context, method, rawURL string) *Response {
 			out.Elapsed = time.Since(start)
 			return out
 		}
+		sameHost := origHost == "" || strings.ToLower(req.URL.Hostname()) == origHost
 		req.Header.Set("User-Agent", f.userAgent)
 		req.Header.Set("Accept", "*/*")
 		req.Header.Set("Accept-Encoding", "identity")
 		for k, v := range f.headers {
+			// Don't forward credential-bearing custom headers off-origin.
+			if !sameHost && isCredentialHeader(k) {
+				continue
+			}
 			req.Header.Set(k, v)
 		}
-		if f.cookie != "" {
+		if f.cookie != "" && sameHost {
 			req.Header.Set("Cookie", f.cookie)
 		}
-		if f.bearer != "" {
+		if f.bearer != "" && sameHost {
 			req.Header.Set("Authorization", "Bearer "+f.bearer)
 		}
-		if f.basicUser != "" || f.basicPass != "" {
+		if (f.basicUser != "" || f.basicPass != "") && sameHost {
 			req.SetBasicAuth(f.basicUser, f.basicPass)
 		}
 		// Host override applies only to the initial request, not to any host
@@ -415,6 +428,17 @@ func (f *Fetcher) do(ctx context.Context, method, rawURL string) *Response {
 	out.Err = "too many redirects"
 	out.Elapsed = time.Since(start)
 	return out
+}
+
+// isCredentialHeader reports whether a custom request header carries
+// credentials that must not be forwarded across a cross-host redirect.
+func isCredentialHeader(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "authorization", "cookie", "proxy-authorization":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveLocation(base, loc string) (string, error) {

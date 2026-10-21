@@ -10,6 +10,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Web GUI shows the build version in the page footer (`/api/version`).
 - Statistics: a **PHP services by port** breakdown (e.g. http/80 vs https/443).
+- Statistics: a **web-server distribution** chart (Apache vs nginx vs …).
+- Results list sort order **"Most critical vulnerabilities first"**, bringing
+  services with the highest-severity vulnerability leads to the top.
+- Richer **nginx metadata**: OpenResty (LuaJIT) and Tengine flavours, the
+  `stub_status` module with its live connection counters, `X-Accel`
+  internal-redirect/offload support, and a version recovered from a status or
+  error page when `server_tokens off` hides the `Server` header.
+- Additional version-correlated vulnerability leads: PHP core
+  (CVE-2022-37454, CVE-2024-8929, CVE-2025-1217, CVE-2025-1219) and CMS cores
+  (WordPress CVE-2022-21663/21664, Joomla CVE-2017-8917).
 - Progress bar now shows when the scan **started**, how long it has been
   **running**, and when it **ended**.
 - Each result card shows **when it was scanned** (`checked_at`).
@@ -23,6 +33,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Security:** configured cookies and Basic/Bearer credentials are no longer
+  re-sent when a redirect leads to a different host — they are scoped to the
+  original target host.
+- **Detection accuracy:** soft-404 / catch-all servers can no longer reach a
+  PHP verdict from URL-only (`/phpmyadmin/`) or behavioural (PATH_INFO) signals
+  alone; those are now gated against a guaranteed-missing-URL baseline and
+  require content that is distinguishable from it.
 - Resolve-DNS now streams each host's resolved names before its services, so an
   IP target shows its reverse (PTR) hostname while the scan runs, not only after
   it completes.

@@ -44,6 +44,40 @@ func TestCatalogCorrelateCMS(t *testing.T) {
 	if len(c.CorrelateCMS("Drupal", "7.59")) != 0 {
 		t.Fatal("Drupal 7.59 should be patched")
 	}
+	// Joomla 3.7.0 SQL injection (CVE-2017-8917) is a single-release window.
+	if !hasVulnID(c.CorrelateCMS("Joomla", "3.7.0"), "CVE-2017-8917") {
+		t.Fatal("Joomla 3.7.0 should match CVE-2017-8917")
+	}
+	if hasVulnID(c.CorrelateCMS("Joomla", "3.7.1"), "CVE-2017-8917") {
+		t.Fatal("Joomla 3.7.1 should be patched for CVE-2017-8917")
+	}
+}
+
+func TestCatalogNewPHPEntries(t *testing.T) {
+	c := DefaultCatalog()
+	// SHA-3 buffer overflow affects 8.1.10, fixed in 8.1.11.
+	if !hasVulnID(c.CorrelatePHP("PHP", "8.1.10"), "CVE-2022-37454") {
+		t.Error("8.1.10 should match CVE-2022-37454")
+	}
+	if hasVulnID(c.CorrelatePHP("PHP", "8.1.11"), "CVE-2022-37454") {
+		t.Error("8.1.11 should be patched for CVE-2022-37454")
+	}
+	// March 2025 line: 8.3.18 vulnerable, 8.3.19 fixed.
+	if !hasVulnID(c.CorrelatePHP("PHP", "8.3.18"), "CVE-2025-1219") {
+		t.Error("8.3.18 should match CVE-2025-1219")
+	}
+	if hasVulnID(c.CorrelatePHP("PHP", "8.3.19"), "CVE-2025-1219") {
+		t.Error("8.3.19 should be patched for CVE-2025-1219")
+	}
+}
+
+func hasVulnID(vs []Vulnerability, id string) bool {
+	for _, v := range vs {
+		if v.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRangeSpecMatching(t *testing.T) {
