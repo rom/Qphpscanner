@@ -135,3 +135,32 @@ func TestExtraBodySignatures(t *testing.T) {
 		}
 	}
 }
+
+func findEv(d *Detection, signal string) (Evidence, bool) {
+	for _, e := range d.Evidence {
+		if e.Signal == signal {
+			return e, true
+		}
+	}
+	return Evidence{}, false
+}
+
+func TestEvidenceCarriesHTTPStatus(t *testing.T) {
+	in := Input{
+		TargetURL: "http://h/index.php",
+		Deep:      true,
+		Root:      resp(200, map[string]string{"X-Powered-By": "PHP/8.2.0"}, nil, "<html></html>"),
+		Extra: map[string]*probe.Response{
+			// A 404 error page carrying an Apache PHP server signature.
+			"http://h/qphpscanner_probe_404": resp(404, nil, nil,
+				"<address>Apache/2.4.41 (Ubuntu) PHP/8.2.0 Server at h Port 80</address>"),
+		},
+	}
+	d := Analyze(in)
+	if ev, ok := findEv(d, "header.x-powered-by"); !ok || ev.Status != 200 {
+		t.Fatalf("x-powered-by status = %d (ok=%v), want 200", ev.Status, ok)
+	}
+	if ev, ok := findEv(d, "body.apache-sig"); !ok || ev.Status != 404 {
+		t.Fatalf("apache-sig status = %d (ok=%v), want 404", ev.Status, ok)
+	}
+}

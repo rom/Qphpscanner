@@ -123,7 +123,7 @@ func Analyze(in Input) *Detection {
 			Signal: "url.php-extension", Source: in.TargetURL, Weight: 40,
 			Detail: "Requested path uses a PHP file extension",
 			Where:  "request URL", How: "URL suffix match",
-			Pattern: ".php/.php5/.phtml/…", Snippet: in.TargetURL,
+			Pattern: ".php/.php5/.phtml/…", Snippet: in.TargetURL, Status: in.Root.Status,
 		})
 	}
 
@@ -140,7 +140,7 @@ func Analyze(in Input) *Detection {
 			d.PHPInfoURL = url
 			addEv(Evidence{
 				Signal: "diag.phpinfo", Source: url, Weight: 90,
-				Detail: "phpinfo() output is publicly exposed",
+				Detail: "phpinfo() output is publicly exposed", Status: resp.Status,
 			})
 			if m := rePHPInfoVersion.FindStringSubmatch(body); m != nil {
 				setVersion(m[1], "phpinfo()", 3)
@@ -150,11 +150,18 @@ func Analyze(in Input) *Detection {
 		if resp.Status == 200 && isComposerManifest(url, body) {
 			addEv(Evidence{
 				Signal: "diag.composer", Source: url, Weight: 45,
-				Detail: "Composer manifest/lock is publicly readable (PHP project)",
+				Detail: "Composer manifest/lock is publicly readable (PHP project)", Status: resp.Status,
 			})
 		}
 		if resp.Status == 200 {
-			detectStatusDashboards(url, body, addEv, addExt, addFw, addMod)
+			st := resp.Status
+			addEvStatus := func(ev Evidence) {
+				if ev.Status == 0 {
+					ev.Status = st
+				}
+				addEv(ev)
+			}
+			detectStatusDashboards(url, body, addEvStatus, addExt, addFw, addMod)
 		}
 	}
 
@@ -162,7 +169,7 @@ func Analyze(in Input) *Detection {
 	if p := in.PathInfo; p != nil && p.Err == "" && p.Status == 200 {
 		addEv(Evidence{
 			Signal: "behavior.path-info", Source: p.FinalURL, Weight: 35,
-			Detail: "index.php/<path> is served (PHP PATH_INFO handling)",
+			Detail: "index.php/<path> is served (PHP PATH_INFO handling)", Status: p.Status,
 		})
 	}
 
@@ -185,7 +192,7 @@ func Analyze(in Input) *Detection {
 				Signal: "favicon.catalog", Source: in.Favicon.FinalURL, Weight: w,
 				Detail: detail, Data: d.FaviconHash + " → " + entry.Product,
 				Where: "site favicon", How: "mmh3 favicon-hash catalogue match",
-				Pattern: d.FaviconHash, Snippet: entry.Product,
+				Pattern: d.FaviconHash, Snippet: entry.Product, Status: in.Favicon.Status,
 			})
 			addFw(entry.Framework)
 		}
@@ -247,6 +254,15 @@ func analyzeResponse(
 ) {
 	if resp == nil || resp.Err != "" {
 		return
+	}
+
+	// Tag every signal from this response with its HTTP status code.
+	rawAddEv := addEv
+	addEv = func(ev Evidence) {
+		if ev.Status == 0 {
+			ev.Status = resp.Status
+		}
+		rawAddEv(ev)
 	}
 
 	// Header-based signatures.
@@ -369,7 +385,7 @@ func analyzeEasterEggs(in Input, addEv func(Evidence), setVersion func(string, s
 		if containsFold(b, "PHP Credits") || containsFold(b, "Zend Engine") || containsFold(b, "PHP Group") {
 			addEv(Evidence{
 				Signal: "easter-egg.credits", Source: c.FinalURL, Weight: 85,
-				Detail: "expose_php easter-egg credits page served (PHP < 5.5, expose_php On)",
+				Detail: "expose_php easter-egg credits page served (PHP < 5.5, expose_php On)", Status: c.Status,
 			})
 		}
 	}
@@ -379,7 +395,7 @@ func analyzeEasterEggs(in Input, addEv func(Evidence), setVersion func(string, s
 			addEv(Evidence{
 				Signal: "easter-egg.logo", Source: l.FinalURL, Weight: 80,
 				Detail: "expose_php easter-egg logo image served (PHP < 5.5, expose_php On)",
-				Data:   "Content-Type: " + l.HeaderGet("Content-Type"),
+				Data:   "Content-Type: " + l.HeaderGet("Content-Type"), Status: l.Status,
 			})
 		}
 	}

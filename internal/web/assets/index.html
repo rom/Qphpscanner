@@ -22,9 +22,16 @@
     <section class="panel form-panel" aria-label="Scan configuration">
       <h2>New scan</h2>
       <form id="scan-form">
-        <label for="targets">Targets</label>
+        <div class="targets-head">
+          <label for="targets">Targets</label>
+          <div class="targets-tools">
+            <label for="targets-file" class="file-btn" title="Load a target list from a file">Load from file…</label>
+            <input type="file" id="targets-file" accept=".txt,.csv,.lst,.list,text/plain" hidden multiple>
+            <button type="button" id="targets-clear" class="link-btn" title="Clear the target list">clear</button>
+          </div>
+        </div>
         <textarea id="targets" rows="4" placeholder="example.com&#10;https://example.org/app.php&#10;10.0.0.0/24&#10;192.168.1.1-20&#10;2001:db8::1"></textarea>
-        <p class="hint">One per line (or comma separated): URL, IPv4/IPv6, CIDR, 1.2.3.4-9 range, or 1.2.3.* wildcard.</p>
+        <p class="hint">One per line (or comma separated): URL, IPv4/IPv6, CIDR, 1.2.3.4-9 range, or 1.2.3.* wildcard. Loading a file appends its lines; '#' comments and blanks are skipped.</p>
 
         <div class="grid2">
           <div>

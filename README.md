@@ -54,8 +54,9 @@ version-based vulnerabilities**. It never attempts to exploit anything.
 - **Confidence tiers** (low/medium/high) on every signature and evidence item.
 - **Evidence provenance**: each evidence item records *where* it was found
   (which header/cookie/body/behaviour), *how* it matched (the technique), the
-  literal matcher, the matched snippet with context, the body line number and
-  the exact probe (method + URL) that produced it — in every output and report.
+  literal matcher, the matched snippet with context, the body line number, the
+  exact probe (method + URL) and its **HTTP response code** — in every output
+  and report.
 - **Vulnerability leads** (deep mode): a curated, version-correlated catalogue
   of ~40 PHP-core CVEs plus famous CMS-core CVEs (CVE-2024-4577,
   CVE-2019-11043, CVE-2012-1823, Drupalgeddon2, …), **extensible with external
