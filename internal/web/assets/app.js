@@ -261,6 +261,9 @@ function renderService(svc) {
     add("X-Powered-By", h.powered_by);
     add("Title", h.title);
     if (h.tls) add("TLS", h.tls.version + " (" + h.tls.cipher_suite + ")");
+    if (h.http2) add("HTTP version", "HTTP/2 (negotiated)");
+    if (h.alpn) add("ALPN", h.alpn);
+    if (h.h2c) add("h2c", "advertised (cleartext HTTP/2)");
     if (h.final_url) add("Redirected to", h.final_url);
   } else {
     add("HTTP", "no response");

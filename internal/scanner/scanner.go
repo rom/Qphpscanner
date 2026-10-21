@@ -545,6 +545,16 @@ func buildHTTPInfo(url string, resp *probe.Response) *HTTPInfo {
 	if info.FinalURL == url {
 		info.FinalURL = ""
 	}
+	info.HTTP2 = strings.HasPrefix(resp.Proto, "HTTP/2")
+	if resp.TLS != nil {
+		info.ALPN = resp.TLS.ALPN
+	}
+	// Cleartext HTTP/2 (h2c) advertised via an Upgrade header.
+	for _, up := range resp.HeaderValues("Upgrade") {
+		if strings.Contains(strings.ToLower(up), "h2c") {
+			info.H2C = true
+		}
+	}
 	if m := reTitle.FindStringSubmatch(resp.BodyString()); m != nil {
 		info.Title = strings.TrimSpace(collapseSpace(m[1]))
 		if len(info.Title) > 160 {

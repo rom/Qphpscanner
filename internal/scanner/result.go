@@ -87,4 +87,10 @@ type HTTPInfo struct {
 	Redirects   int               `json:"redirects,omitempty" xml:"redirects,omitempty"`
 	TLS         *probe.TLSInfo    `json:"tls,omitempty" xml:"tls,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty" xml:"-"`
+	// HTTP2 is true when the primary response used HTTP/2; ALPN is the TLS
+	// protocol negotiated; H2C is true when the server advertised cleartext
+	// HTTP/2 upgrade support.
+	HTTP2 bool   `json:"http2,omitempty" xml:"http2,omitempty"`
+	ALPN  string `json:"alpn,omitempty" xml:"alpn,omitempty"`
+	H2C   bool   `json:"h2c,omitempty" xml:"h2c,omitempty"`
 }

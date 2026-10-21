@@ -144,6 +144,15 @@ func renderService(d *document, svc scanner.ServiceResult) {
 	if h.TLS != nil {
 		d.kv("TLS", fmt.Sprintf("%s (%s)", h.TLS.Version, h.TLS.CipherSuite))
 	}
+	if proto := httpVersionLabel(h); proto != "" {
+		d.kv("HTTP version", proto)
+	}
+	if h.ALPN != "" {
+		d.kv("ALPN", h.ALPN)
+	}
+	if h.H2C {
+		d.kv("h2c", "advertised (cleartext HTTP/2 upgrade offered)")
+	}
 
 	renderServer(d, svc.Server)
 	renderProxy(d, svc.Proxy)
@@ -308,6 +317,15 @@ func renderSecurityTxt(d *document, st *securitytxt.SecurityTxt) {
 	if len(st.Hiring) > 0 {
 		d.kv("  hiring", strings.Join(st.Hiring, ", "))
 	}
+}
+
+// httpVersionLabel highlights HTTP/2 (the raw proto is already shown on the
+// status line, so HTTP/1.x needs no extra row).
+func httpVersionLabel(h *scanner.HTTPInfo) string {
+	if h.HTTP2 {
+		return "HTTP/2 (negotiated)"
+	}
+	return ""
 }
 
 func schemeLabel(svc scanner.ServiceResult) string {
