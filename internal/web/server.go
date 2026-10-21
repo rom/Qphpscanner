@@ -194,10 +194,11 @@ type scanRequest struct {
 
 // streamMsg is one line of the NDJSON response stream.
 type streamMsg struct {
-	Type   string                 `json:"type"` // "progress" | "result" | "error"
-	Event  *scanner.ProgressEvent `json:"event,omitempty"`
-	Result *scanner.ScanResult    `json:"result,omitempty"`
-	Error  string                 `json:"error,omitempty"`
+	Type    string                 `json:"type"` // "progress" | "service" | "result" | "error"
+	Event   *scanner.ProgressEvent `json:"event,omitempty"`
+	Service *scanner.ServiceResult `json:"service,omitempty"`
+	Result  *scanner.ScanResult    `json:"result,omitempty"`
+	Error   string                 `json:"error,omitempty"`
 }
 
 // buildOptions turns a request into scanner options, or returns a user error.
@@ -272,6 +273,12 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	opts.OnProgress = func(ev scanner.ProgressEvent) {
 		e := ev
 		send(streamMsg{Type: "progress", Event: &e})
+	}
+	// Stream every completed service so the GUI can render partial results that
+	// survive a cancellation or timeout (nothing is wiped on error).
+	opts.OnService = func(res scanner.ServiceResult) {
+		r := res
+		send(streamMsg{Type: "service", Service: &r})
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)

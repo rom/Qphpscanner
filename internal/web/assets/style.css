@@ -101,6 +101,46 @@ details.advanced > summary { cursor: pointer; font-size: .82rem; color: var(--ac
 .diff-removed { color: var(--red); }
 .svc-dns { font-size: .76rem; color: var(--text-dim); font-family: ui-monospace, Menlo, Consolas, monospace; margin: 2px 0 0; word-break: break-all; }
 
+/* results sub-tabs (Results / Failures) */
+.result-tabs { display: flex; gap: 4px; margin: 10px 0 8px; }
+.result-tabs.hidden { display: none; }
+.rtab {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: .82rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.rtab.active { color: var(--text); border-color: var(--accent); }
+.rtab-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  font-variant-numeric: tabular-nums;
+  font-size: .72rem;
+}
+.rtab.active .rtab-count { background: var(--accent); color: #fff; }
+
+.scan-error {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--orange);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: .85rem;
+}
+.scan-error.hidden { display: none; }
+
+.svc.v-fail { border-left-color: var(--gray); }
+.fail-reason { color: var(--orange); font-weight: 600; }
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

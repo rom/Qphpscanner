@@ -121,3 +121,51 @@ func TestScanBlockListDropsTarget(t *testing.T) {
 		t.Errorf("blocked scan still produced %d services", ov.Stats.Services)
 	}
 }
+
+func TestScanStreamsServiceMessages(t *testing.T) {
+	target := phpTarget()
+	defer target.Close()
+	s := NewServer("x")
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	// Scan an open PHP target plus a closed port; both should stream as
+	// "service" messages even though include_closed is off.
+	host := strings.TrimPrefix(target.URL, "http://")
+	h, portStr, _ := strings.Cut(host, ":")
+	_ = portStr
+	body := `{"targets":["` + h + `"],"ports":"` + portStr + `,1","mode":"detect","tls":"off","security_txt":false}`
+
+	resp, err := http.Post(srv.URL+"/api/scan", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	var services, open, closed int
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		var msg streamMsg
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			t.Fatalf("bad NDJSON: %v", err)
+		}
+		if msg.Type == "service" && msg.Service != nil {
+			services++
+			if msg.Service.PortOpen {
+				open++
+			} else {
+				closed++
+			}
+		}
+	}
+	if services < 2 {
+		t.Fatalf("expected >=2 service messages, got %d", services)
+	}
+	if open == 0 || closed == 0 {
+		t.Errorf("expected both open (%d) and closed (%d) services streamed", open, closed)
+	}
+}

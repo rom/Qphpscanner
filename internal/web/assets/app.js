@@ -13,6 +13,11 @@ const scanBtn = $("scan-btn");
 const cancelBtn = $("cancel-btn");
 const summaryEl = $("summary");
 const resultsEl = $("results");
+const failuresEl = $("failures");
+const resultTabsEl = $("result-tabs");
+const okCountEl = $("ok-count");
+const failCountEl = $("fail-count");
+const scanErrorEl = $("scan-error");
 const downloadsEl = $("downloads");
 const progressEl = $("progress");
 const progressFill = $("progress-fill");
@@ -74,6 +79,18 @@ if (targetsClearEl) {
 let overviewCache = null;
 for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => showView(tab.dataset.view));
+}
+
+// Results / Failures sub-tabs inside the Scan view.
+for (const rt of document.querySelectorAll(".rtab")) {
+  rt.addEventListener("click", () => showResultTab(rt.dataset.rtab));
+}
+function showResultTab(which) {
+  for (const rt of document.querySelectorAll(".rtab")) {
+    rt.classList.toggle("active", rt.dataset.rtab === which);
+  }
+  resultsEl.classList.toggle("hidden", which !== "ok");
+  failuresEl.classList.toggle("hidden", which !== "fail");
 }
 
 function showView(name) {
@@ -142,10 +159,14 @@ async function runScan() {
   scanBtn.disabled = true;
   cancelBtn.classList.remove("hidden");
   setStatus("");
-  resultsEl.replaceChildren();
-  summaryEl.replaceChildren();
+  scanErrorEl.classList.add("hidden");
   downloadsEl.classList.add("hidden");
   startProgress();
+
+  // Prepare a fresh render, but do NOT wipe the existing results yet: they are
+  // cleared lazily when the first new service arrives, so a scan that fails
+  // before producing anything leaves the previous view intact.
+  beginScanRender();
 
   let openCount = 0;
   let phpCount = 0;
@@ -187,6 +208,8 @@ async function runScan() {
             logLine(line);
           }
         }
+      } else if (msg.type === "service") {
+        onServiceMsg(msg.service);
       } else if (msg.type === "result") {
         result = msg.result;
       } else if (msg.type === "error") {
@@ -210,17 +233,22 @@ async function runScan() {
     if (errMsg) throw new Error(errMsg);
     if (!result) throw new Error("scan ended without a result");
 
-    render(result);
+    finishScanRender(result);
     setStatus(`Done in ${result.meta.duration_ms} ms · ${result.summary.hosts_scanned} host(s).`);
     downloadsEl.classList.remove("hidden");
     invalidateOverview();
     refreshHistory();
   } catch (err) {
-    if (err.name === "AbortError") {
-      setStatus("Scan cancelled.");
-    } else {
-      setStatus("Error: " + err.message, true);
-    }
+    // Never wipe results on error: show a banner and keep whatever streamed.
+    const aborted = err.name === "AbortError";
+    const msg = aborted
+      ? "Scan cancelled — results collected so far are shown below."
+      : friendlyScanError(err.message);
+    setStatus(aborted ? "Scan cancelled." : "Error: " + err.message, !aborted);
+    showScanError(msg);
+    // History/overview may have gained the partial run on the server side.
+    invalidateOverview();
+    refreshHistory();
   } finally {
     scanBtn.disabled = false;
     cancelBtn.classList.add("hidden");
@@ -266,16 +294,106 @@ function setStatus(msg, isError) {
   statusEl.classList.toggle("error", !!isError);
 }
 
-function render(result) {
+// scanRender tracks the live render of the current scan so results stream in
+// and survive an error/timeout instead of being wiped.
+let scanRender = null;
+
+function beginScanRender() {
+  scanRender = { pendingClear: true, okGroups: new Map(), failGroups: new Map(), ok: 0, fail: 0 };
+}
+
+// ensureCleared wipes the pane exactly once — when the first new service (or a
+// final result) arrives — so a scan that fails before producing anything keeps
+// the previous view on screen.
+function ensureCleared() {
+  if (!scanRender || !scanRender.pendingClear) return;
+  scanRender.pendingClear = false;
+  resultsEl.replaceChildren();
+  failuresEl.replaceChildren();
+  summaryEl.replaceChildren();
+  scanRender.okGroups.clear();
+  scanRender.failGroups.clear();
+  scanRender.ok = 0;
+  scanRender.fail = 0;
+  resultTabsEl.classList.remove("hidden");
+  updateResultCounts();
+}
+
+// isProductive marks a service that actually answered HTTP; everything else
+// (closed/filtered ports, connect errors, timeouts, open non-HTTP) is a
+// "failure" shown on the Failures tab.
+function isProductive(svc) {
+  return !!(svc && svc.port_open && svc.http);
+}
+
+function onServiceMsg(svc) {
+  if (!svc) return;
+  ensureCleared();
+  const ok = isProductive(svc);
+  const container = ok ? resultsEl : failuresEl;
+  const groups = ok ? scanRender.okGroups : scanRender.failGroups;
+  let group = groups.get(svc.host);
+  if (!group) {
+    group = renderHostHeader(svc.host);
+    groups.set(svc.host, group);
+    container.appendChild(group.el);
+  }
+  group.body.appendChild(renderService(svc, null));
+  if (ok) scanRender.ok++;
+  else scanRender.fail++;
+  updateResultCounts();
+}
+
+function renderHostHeader(host) {
+  const wrap = el("div", "host-group");
+  wrap.appendChild(el("h3", null, host));
+  const body = el("div");
+  wrap.appendChild(body);
+  return { el: wrap, body };
+}
+
+function updateResultCounts() {
+  okCountEl.textContent = String(scanRender ? scanRender.ok : 0);
+  failCountEl.textContent = String(scanRender ? scanRender.fail : 0);
+}
+
+// finishScanRender runs on a successful result: it re-renders the Results tab
+// from the final result (so resolved A/PTR records show) and leaves the
+// streamed Failures tab in place.
+function finishScanRender(result) {
+  ensureCleared();
   renderSummary(result.summary);
-  const targets = result.targets || [];
-  if (targets.length === 0) {
+  resultsEl.replaceChildren();
+  let ok = 0;
+  for (const t of result.targets || []) {
+    const prod = (t.services || []).filter(isProductive);
+    if (!prod.length) continue;
+    resultsEl.appendChild(renderHost(Object.assign({}, t, { services: prod })));
+    ok += prod.length;
+  }
+  scanRender.ok = ok;
+  updateResultCounts();
+  if (scanRender.ok === 0 && scanRender.fail === 0) {
     resultsEl.appendChild(el("p", "empty", "No open services found."));
-    return;
   }
-  for (const t of targets) {
-    resultsEl.appendChild(renderHost(t));
+}
+
+function showScanError(msg) {
+  scanErrorEl.textContent = msg;
+  scanErrorEl.classList.remove("hidden");
+  // If anything streamed, make sure the result tabs are visible.
+  if (scanRender && !scanRender.pendingClear) resultTabsEl.classList.remove("hidden");
+}
+
+function friendlyScanError(m) {
+  if (!m) return "The scan failed. Any results collected so far are shown below.";
+  if (/deadline exceeded|timeout|timed out/i.test(m)) {
+    return "The scan timed out before completing. The results collected so far are shown below.";
   }
+  if (/context canceled|canceled/i.test(m)) {
+    return "The scan stopped early. Partial results are shown below.";
+  }
+  return "The scan failed (" + m + "). Any results collected so far are shown below.";
 }
 
 function renderSummary(s) {
