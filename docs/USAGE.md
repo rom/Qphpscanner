@@ -21,6 +21,7 @@ or as a local web GUI.
 - [Web GUI](#web-gui)
 - [Resume](#resume)
 - [Audit trail (PCAP and session log)](#audit-trail-pcap-and-session-log)
+- [Offline corpus (record / replay)](#offline-corpus-record--replay)
 - [Exit status](#exit-status)
 - [Examples](#examples)
 - [Interpreting results](#interpreting-results)
@@ -526,6 +527,40 @@ DECISION  192.0.2.10:443  https://192.0.2.10:443/
 ```
 
 Both flags can be combined, and work with any scan mode and target type.
+
+## Offline corpus (record / replay)
+
+A scan can **record** the sanitized HTTP exchanges it performs to a *replay
+corpus*, and a corpus can be **replayed** through the detection pipeline with no
+network — a regression harness for validating detection (and new
+[signature packs](#signature-packs)) against real captured responses.
+
+```sh
+qphpscanner --mode deep --record site.corpus.json example.com   # capture
+qphpscanner --replay site.corpus.json --format json             # replay offline
+qphpscanner --replay site.corpus.json --signature-pack new.json # validate a pack
+```
+
+`--record FILE` (config `record`) reuses the same recorder hook that feeds the
+PCAP/session-log audit trail, so it works alongside them. Recording is
+**aggressively sanitised**: `Set-Cookie` values, credential/challenge headers
+and secret-shaped body values (dotenv `*_KEY`/`*_PASSWORD`/… assignments, JSON
+secret fields) are redacted, while everything detection relies on — cookie
+*names*, header substrings and body markers — is kept. The corpus is bounded
+(body kept per exchange and number of exchanges are both capped) and is a plain
+`qphpscanner-corpus/1` JSON document.
+
+`--replay FILE` (config `replay`) ignores targets, loads the corpus, groups the
+exchanges by origin, reconstructs each origin's detection input from the
+captured responses and re-runs detection — emitting a normal `ScanResult`, so
+output, reports and `--fail-on` all work. Loaded signature packs and vuln feeds
+are applied, so new signatures can be checked against the corpus. The
+`internal/replay` package ships a directory of fixture corpora with expected
+verdicts that `go test` runs as a detection regression suite.
+
+In the web GUI, every scan's corpus is captured in memory and offered as a
+**Corpus** download, and the Compare tab's *Offline replay* panel uploads a
+corpus (optionally with a signature pack) and renders the replayed result.
 
 ## Exit status
 

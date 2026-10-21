@@ -67,6 +67,10 @@ type Config struct {
 	// Audit trail.
 	PCAP string
 	Log  string
+
+	// Offline replay corpus.
+	Record string
+	Replay string
 }
 
 // OutputConfig selects the machine-readable scan output.
@@ -136,6 +140,8 @@ func Load(path string) (*Config, error) {
 	c.TargetsFile = getString(m, "targets_file")
 	c.PCAP = getString(m, "pcap")
 	c.Log = getString(m, "log")
+	c.Record = getString(m, "record")
+	c.Replay = getString(m, "replay")
 	c.Headers = getHeaders(m, "headers")
 	c.VulnFeeds = getStringSlice(m, "vuln_feeds")
 	c.FaviconCatalogs = getStringSlice(m, "favicon_catalogs")

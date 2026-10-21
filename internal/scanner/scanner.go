@@ -13,6 +13,7 @@ import (
 	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/portspec"
 	"github.com/rom/qphpscanner/internal/probe"
+	"github.com/rom/qphpscanner/internal/replay"
 	"github.com/rom/qphpscanner/internal/securitytxt"
 	"github.com/rom/qphpscanner/internal/target"
 	"github.com/rom/qphpscanner/internal/version"
@@ -138,6 +139,13 @@ type Options struct {
 	// LogPath, when set, writes a human-readable session log explaining how
 	// each piece of evidence and each verdict was decided.
 	LogPath string
+	// RecordPath, when set, writes a sanitized replay corpus of every HTTP
+	// exchange to this file, for offline replay/regression testing.
+	RecordPath string
+	// ExtraRecorder, when set, receives every HTTP exchange in addition to any
+	// audit and corpus recorders. The web GUI uses it to capture a corpus in
+	// memory alongside a live scan.
+	ExtraRecorder probe.Recorder
 
 	// Resolver overrides DNS resolution (primarily for testing).
 	Resolver DNSResolver
@@ -225,10 +233,22 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 		return nil, err
 	}
 	defer audit.close()
-	var recorder probe.Recorder
+
+	// Fan every exchange out to the audit sink, an optional corpus recorder and
+	// any caller-supplied recorder.
+	var recs []probe.Recorder
 	if audit != nil {
-		recorder = audit
+		recs = append(recs, audit)
 	}
+	var corpusRec *replay.Recorder
+	if opts.RecordPath != "" {
+		corpusRec = replay.NewRecorder()
+		recs = append(recs, corpusRec)
+	}
+	if opts.ExtraRecorder != nil {
+		recs = append(recs, opts.ExtraRecorder)
+	}
+	recorder := combineRecorders(recs)
 
 	fetcher := probe.NewFetcher(probe.FetcherConfig{
 		Timeout:         opts.Timeout,
@@ -371,6 +391,13 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 		}(host)
 	}
 	wg.Wait()
+
+	// Flush the recorded corpus once every exchange has been captured.
+	if corpusRec != nil {
+		if werr := corpusRec.WriteFile(opts.RecordPath); werr != nil {
+			return nil, fmt.Errorf("write replay corpus: %w", werr)
+		}
+	}
 
 	// Group by host preserving order; drop closed ports unless requested.
 	byHost := map[string][]ServiceResult{}

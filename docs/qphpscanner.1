@@ -237,6 +237,18 @@ opens in Wireshark, tcpdump or tshark.
 Write a human-readable session log to \fIfile\fR recording each request and,
 per service, how every piece of evidence and each verdict was decided.
 .TP
+.BI \-\-record " file"
+Record the sanitized HTTP exchanges of this scan to a replay corpus written to
+\fIfile\fR. Set-Cookie values, credential headers and secret-shaped body values
+are redacted; only what detection needs (cookie names, header substrings, body
+markers) is kept, and the corpus is bounded.
+.TP
+.BI \-\-replay " file"
+Replay a corpus \fIfile\fR through the detection pipeline with no network and
+emit the result like a normal scan. Targets are ignored. Combine with
+\fB\-\-signature\-pack\fR to validate new signatures against captured responses
+offline \(em a regression harness for detection.
+.TP
 .BI \-\-web\-auth " user:pass"
 Protect the web GUI with HTTP Basic authentication.
 .TP

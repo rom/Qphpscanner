@@ -1,0 +1,33 @@
+{
+  "schema": "qphpscanner-corpus/1",
+  "recorded": "2026-10-21T00:00:00Z",
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "http://wp.test:80/",
+      "status": 200,
+      "proto": "HTTP/1.1",
+      "headers": {
+        "X-Powered-By": ["PHP/8.2.4"],
+        "Server": ["Apache/2.4.57"],
+        "Set-Cookie": ["wordpress_logged_in_abc=; Path=/; HttpOnly"],
+        "Content-Type": ["text/html; charset=UTF-8"]
+      },
+      "body": "<html><head><meta name='generator' content='WordPress 6.4.2'></head><body><link rel='stylesheet' href='/wp-content/themes/twentytwentyfour/style.css'><a href='/wp-json/'>api</a></body></html>"
+    },
+    {
+      "method": "GET",
+      "url": "http://wp.test:80/qphpscanner_probe_404",
+      "status": 404,
+      "headers": {"Content-Type": ["text/html"]},
+      "body": "<html><body>Not Found</body></html>"
+    },
+    {
+      "method": "GET",
+      "url": "http://wp.test:80/wp-login.php",
+      "status": 200,
+      "headers": {"Content-Type": ["text/html"]},
+      "body": "<html><body id='login'><form name='loginform' action='/wp-login.php'></form></body></html>"
+    }
+  ]
+}

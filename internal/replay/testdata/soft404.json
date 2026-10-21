@@ -1,0 +1,26 @@
+{
+  "schema": "qphpscanner-corpus/1",
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "http://catch.test:80/",
+      "status": 200,
+      "headers": {"Server": ["nginx"], "Content-Type": ["text/html"]},
+      "body": "<!doctype html><html><head><title>App</title></head><body><div id='root'>single page app</div></body></html>"
+    },
+    {
+      "method": "GET",
+      "url": "http://catch.test:80/qphpscanner_probe_404",
+      "status": 200,
+      "headers": {"Server": ["nginx"], "Content-Type": ["text/html"]},
+      "body": "<!doctype html><html><head><title>App</title></head><body><div id='root'>single page app</div></body></html>"
+    },
+    {
+      "method": "GET",
+      "url": "http://catch.test:80/phpmyadmin/",
+      "status": 200,
+      "headers": {"Server": ["nginx"], "Content-Type": ["text/html"]},
+      "body": "<!doctype html><html><head><title>App</title></head><body><div id='root'>single page app</div></body></html>"
+    }
+  ]
+}

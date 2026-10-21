@@ -119,6 +119,37 @@ func TestRunFailOn(t *testing.T) {
 	}
 }
 
+func TestRunRecordThenReplay(t *testing.T) {
+	ts := phpServer()
+	defer ts.Close()
+	dir := t.TempDir()
+	corpus := filepath.Join(dir, "corpus.json")
+
+	// Record a scan's exchanges to a corpus.
+	if err := run([]string{"--quiet", "--mode", "deep", "--record", corpus, ts.URL}); err != nil {
+		t.Fatalf("record run: %v", err)
+	}
+	if _, err := os.Stat(corpus); err != nil {
+		t.Fatalf("corpus not written: %v", err)
+	}
+
+	// Replay the corpus offline (no targets) and write JSON output.
+	out := filepath.Join(dir, "replay.json")
+	if err := run([]string{"--quiet", "--replay", corpus, "--format", "json", "--out", out}); err != nil {
+		t.Fatalf("replay run: %v", err)
+	}
+	data, _ := os.ReadFile(out)
+	if !strings.Contains(string(data), "\"is_php\": true") {
+		t.Fatalf("replayed output should detect PHP:\n%s", data)
+	}
+}
+
+func TestRunReplayMissingCorpus(t *testing.T) {
+	if err := run([]string{"--quiet", "--replay", "/no/such/corpus.json"}); err == nil {
+		t.Fatal("expected an error for a missing corpus")
+	}
+}
+
 func TestRunDiff(t *testing.T) {
 	ts := phpServer()
 	defer ts.Close()

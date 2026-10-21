@@ -1,0 +1,19 @@
+{
+  "schema": "qphpscanner-corpus/1",
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "http://static.test:80/",
+      "status": 200,
+      "headers": {"Server": ["nginx/1.25.3"], "Content-Type": ["text/html"]},
+      "body": "<!doctype html><html><head><title>Welcome</title></head><body><h1>It works</h1><p>A plain static page served by nginx.</p></body></html>"
+    },
+    {
+      "method": "GET",
+      "url": "http://static.test:80/qphpscanner_probe_404",
+      "status": 404,
+      "headers": {"Server": ["nginx/1.25.3"], "Content-Type": ["text/html"]},
+      "body": "<html><head><title>404</title></head><body>Not Found</body></html>"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/portspec"
 	"github.com/rom/qphpscanner/internal/probe"
+	"github.com/rom/qphpscanner/internal/replay"
 	"github.com/rom/qphpscanner/internal/report"
 	"github.com/rom/qphpscanner/internal/scanner"
 	"github.com/rom/qphpscanner/internal/version"
@@ -28,11 +29,13 @@ import (
 //go:embed assets
 var assets embed.FS
 
-// historyItem is one retained scan result.
+// historyItem is one retained scan result, with the sanitized replay corpus
+// captured alongside it (when the scan produced one).
 type historyItem struct {
 	ID     string
 	At     time.Time
 	Result *scanner.ScanResult
+	Corpus *replay.Corpus
 }
 
 // Server hosts the GUI and API. Recent scan results are retained in memory so
@@ -72,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/history", s.handleHistory)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/diff-upload", s.handleDiffUpload)
+	mux.HandleFunc("POST /api/replay", s.handleReplay)
 	mux.HandleFunc("GET /api/overview", s.handleOverview)
 	mux.HandleFunc("POST /api/origin-compare", s.handleOriginCompare)
 	mux.HandleFunc("GET /api/version", s.handleVersion)
@@ -118,6 +122,7 @@ func (s *Server) handleAPIFallback(w http.ResponseWriter, r *http.Request) {
 		"/api/history":        http.MethodGet,
 		"/api/version":        http.MethodGet,
 		"/api/origin-compare": http.MethodPost,
+		"/api/replay":         http.MethodPost,
 	}
 	if want, ok := known[r.URL.Path]; ok {
 		w.Header().Set("Allow", want+", OPTIONS")
@@ -144,12 +149,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) store(res *scanner.ScanResult) string {
+func (s *Server) store(res *scanner.ScanResult, corpus *replay.Corpus) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seq++
 	id := fmt.Sprintf("scan-%d", s.seq)
-	s.history = append([]historyItem{{ID: id, At: time.Now(), Result: res}}, s.history...)
+	s.history = append([]historyItem{{ID: id, At: time.Now(), Result: res, Corpus: corpus}}, s.history...)
 	if len(s.history) > s.histMax {
 		s.history = s.history[:s.histMax]
 	}
@@ -157,17 +162,24 @@ func (s *Server) store(res *scanner.ScanResult) string {
 }
 
 func (s *Server) lookup(id string) *scanner.ScanResult {
+	if h := s.lookupItem(id); h != nil {
+		return h.Result
+	}
+	return nil
+}
+
+func (s *Server) lookupItem(id string) *historyItem {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if id == "" {
 		if len(s.history) > 0 {
-			return s.history[0].Result
+			return &s.history[0]
 		}
 		return nil
 	}
-	for _, h := range s.history {
-		if h.ID == id {
-			return h.Result
+	for i := range s.history {
+		if s.history[i].ID == id {
+			return &s.history[i]
 		}
 	}
 	return nil
@@ -335,25 +347,47 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
+	// Capture a sanitized replay corpus alongside the scan so it can be
+	// downloaded (format=corpus) and replayed later.
+	rec := replay.NewRecorder()
+	opts.ExtraRecorder = rec
+
 	result, err := scanner.Scan(ctx, targets, opts)
 	if err != nil {
 		send(streamMsg{Type: "error", Error: err.Error()})
 		return
 	}
 
-	s.store(result)
+	s.store(result, rec.Corpus())
 
 	send(streamMsg{Type: "result", Result: result})
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
-	res := s.lookup(r.URL.Query().Get("scan"))
-	if res == nil {
+	scanID := r.URL.Query().Get("scan")
+	item := s.lookupItem(scanID)
+	if item == nil {
 		http.Error(w, "no such scan (run one first)", http.StatusBadRequest)
 		return
 	}
+	res := item.Result
 
 	format := strings.ToLower(r.URL.Query().Get("format"))
+
+	// The replay corpus is captured during the scan, not derived from the result.
+	if format == "corpus" {
+		if item.Corpus == nil {
+			http.Error(w, "no corpus captured for this scan", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", downloadName(res, scanID, "corpus.json", true)))
+		enc := json.NewEncoder(w)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(item.Corpus)
+		return
+	}
 	var (
 		ctype string
 		ext   string
@@ -476,6 +510,39 @@ func (s *Server) handleDiffUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleReplay replays an uploaded corpus through the detection pipeline with
+// no network and returns (and retains) the resulting scan. An optional
+// signature pack can be supplied as the "pack" query value (raw JSON) to
+// validate new signatures against the corpus.
+func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, streamMsg{Type: "error", Error: "read corpus: " + err.Error()})
+		return
+	}
+	corpus, err := replay.Parse(data)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, streamMsg{Type: "error", Error: err.Error()})
+		return
+	}
+	var opts scanner.Options
+	if pack := r.URL.Query().Get("pack"); strings.TrimSpace(pack) != "" {
+		sigs, perr := buildSignatureSet([]string{pack})
+		if perr != nil {
+			writeJSON(w, http.StatusBadRequest, streamMsg{Type: "error", Error: perr.Error()})
+			return
+		}
+		opts.Signatures = sigs
+	}
+	result, err := scanner.ReplayCorpus(corpus, opts)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, streamMsg{Type: "error", Error: err.Error()})
+		return
+	}
+	s.store(result, nil)
+	writeJSON(w, http.StatusOK, streamMsg{Type: "result", Result: result})
+}
+
 func latestID(id string) string {
 	if id == "latest" {
 		return ""
@@ -567,8 +634,8 @@ func (s *Server) handleOriginCompare(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]interface{}{"error": "origin scan failed: " + err.Error()})
 		return
 	}
-	s.store(edge)
-	s.store(originRes)
+	s.store(edge, nil)
+	s.store(originRes, nil)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"host":        host,

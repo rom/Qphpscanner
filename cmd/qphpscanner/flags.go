@@ -84,6 +84,10 @@ type flags struct {
 	// audit trail
 	pcapPath string
 	logPath  string
+
+	// offline replay corpus
+	recordPath string
+	replayPath string
 }
 
 func newFlagSet() *flag.FlagSet {
@@ -191,6 +195,10 @@ func bindFlags(fs *flag.FlagSet) *flags {
 	// Audit trail.
 	fs.StringVar(&f.pcapPath, "pcap", "", "write a libpcap capture of every HTTP exchange to this file (audit trail)")
 	fs.StringVar(&f.logPath, "log", "", "write a human-readable session log explaining each detection decision")
+
+	// Offline replay corpus.
+	fs.StringVar(&f.recordPath, "record", "", "record sanitized HTTP exchanges of this scan to a replay corpus file")
+	fs.StringVar(&f.replayPath, "replay", "", "replay a corpus file through detection offline (no network); ignores targets")
 
 	fs.SetOutput(os.Stderr)
 	return f

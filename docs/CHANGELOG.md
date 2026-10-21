@@ -8,6 +8,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Offline replay / fixture corpus:** a scan's HTTP exchanges can be recorded
+  to a sanitized replay corpus (`--record FILE`, config `record`, or
+  downloaded from the web GUI) and replayed through the detection pipeline with
+  no network (`--replay FILE`, config `replay`, or the web GUI's corpus
+  uploader). Recording drops Set-Cookie values, credential headers and
+  secret-shaped body values while keeping what detection needs (cookie names,
+  header substrings, body markers), and the corpus is bounded. Replaying
+  reconstructs each origin's detection input from the captured responses and
+  re-runs detection, applying any loaded signature packs — a regression harness
+  for validating new signatures against real captured responses (static copies,
+  generic login pages, WAF challenges, soft-404s), runnable under `go test`.
+
 - **Versioned signature packs:** detection signatures can now be extended at
   runtime without recompiling. A pack is a dependency-free
   `qphpscanner-signature-pack/1` JSON document with an id/version and

@@ -96,6 +96,16 @@ func TestSignaturePacksConfig(t *testing.T) {
 	}
 }
 
+func TestRecordReplayConfig(t *testing.T) {
+	c, err := loadString(t, "record: scan.corpus.json\nreplay: in.corpus.json\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Record != "scan.corpus.json" || c.Replay != "in.corpus.json" {
+		t.Fatalf("record/replay = %q / %q", c.Record, c.Replay)
+	}
+}
+
 func TestResolveAndSNIConfig(t *testing.T) {
 	c, err := loadString(t, "sni: origin.example.com\nresolve:\n  - \"example.com:443:203.0.113.10\"\n  - \"example.com:80:203.0.113.10\"\n")
 	if err != nil {

@@ -1,0 +1,19 @@
+{
+  "schema": "qphpscanner-corpus/1",
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "http://env.test:80/",
+      "status": 200,
+      "headers": {"Server": ["nginx"], "Content-Type": ["text/html"]},
+      "body": "<!doctype html><html><head><title>Home</title></head><body>welcome</body></html>"
+    },
+    {
+      "method": "GET",
+      "url": "http://env.test:80/.env",
+      "status": 200,
+      "headers": {"Content-Type": ["text/plain"]},
+      "body": "APP_ENV=production\nAPP_KEY=[REDACTED]\nDB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PASSWORD=[REDACTED]\n"
+    }
+  ]
+}

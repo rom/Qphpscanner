@@ -138,6 +138,79 @@ if (sigpackFileEl) {
   });
 }
 
+// Offline replay: upload a recorded corpus (and optionally a signature pack) and
+// run it through detection with no network, rendering the result like a scan.
+let replayCorpusText = null;
+let replayPackText = null;
+const replayFileEl = $("replay-file");
+if (replayFileEl) {
+  replayFileEl.addEventListener("change", async () => {
+    const f = (replayFileEl.files || [])[0];
+    if (!f) return;
+    try {
+      replayCorpusText = await f.text();
+      $("replay-file-name").textContent = " " + f.name;
+    } catch (_) {
+      setReplayStatus("Could not read " + f.name, true);
+    }
+    replayFileEl.value = "";
+  });
+}
+const replayPackEl = $("replay-pack");
+if (replayPackEl) {
+  replayPackEl.addEventListener("change", async () => {
+    const f = (replayPackEl.files || [])[0];
+    if (!f) return;
+    try {
+      replayPackText = await f.text();
+      $("replay-pack-name").textContent = " " + f.name;
+    } catch (_) {
+      setReplayStatus("Could not read " + f.name, true);
+    }
+    replayPackEl.value = "";
+  });
+}
+$("replay-run") && $("replay-run").addEventListener("click", runReplay);
+
+async function runReplay() {
+  if (!replayCorpusText) {
+    setReplayStatus("Load a corpus file first.", true);
+    return;
+  }
+  setReplayStatus("Replaying…");
+  try {
+    let url = "api/replay";
+    if (replayPackText) url += "?pack=" + encodeURIComponent(replayPackText);
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: replayCorpusText,
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.type === "error") {
+      throw new Error(data.error || "HTTP " + resp.status);
+    }
+    const result = data.result;
+    showView("scan");
+    beginScanRender();
+    finishScanRender(result);
+    setStatus(`Replayed corpus · ${result.summary.hosts_scanned} host(s) · PHP ${result.summary.php_confirmed + result.summary.php_likely}.`);
+    downloadsEl.classList.remove("hidden");
+    setReplayStatus("Replayed — results shown on the Scan tab.");
+    invalidateOverview();
+    refreshHistory();
+  } catch (err) {
+    setReplayStatus("Error: " + err.message, true);
+  }
+}
+
+function setReplayStatus(msg, isError) {
+  const e = $("replay-status");
+  if (!e) return;
+  e.textContent = msg || "";
+  e.classList.toggle("error", !!isError);
+}
+
 // ---------- tabs ----------
 let overviewCache = null;
 for (const tab of document.querySelectorAll(".tab")) {
@@ -1186,8 +1259,8 @@ function renderHistoryEntry(scan) {
 
   const dl = el("div", "downloads");
   dl.appendChild(el("span", null, "Download:"));
-  for (const fmt of ["json", "csv", "sarif", "html", "pdf"]) {
-    const a = el("a", null, fmt.toUpperCase());
+  for (const fmt of ["json", "csv", "sarif", "html", "pdf", "corpus"]) {
+    const a = el("a", null, fmt === "corpus" ? "Corpus" : fmt.toUpperCase());
     a.href = `api/download?scan=${encodeURIComponent(scan.id)}&format=${fmt}`;
     dl.appendChild(a);
   }

@@ -1,0 +1,19 @@
+{
+  "schema": "qphpscanner-corpus/1",
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "http://login.test:80/",
+      "status": 200,
+      "headers": {"Server": ["nginx"], "Content-Type": ["text/html"]},
+      "body": "<!doctype html><html><head><title>Sign in</title></head><body><form method='post' action='/session'><input name='email' type='email'><input name='password' type='password'><button>Log in</button></form></body></html>"
+    },
+    {
+      "method": "GET",
+      "url": "http://login.test:80/qphpscanner_probe_404",
+      "status": 404,
+      "headers": {"Content-Type": ["text/html"]},
+      "body": "<html><body>Page not found</body></html>"
+    }
+  ]
+}

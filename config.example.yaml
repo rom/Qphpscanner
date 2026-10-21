@@ -154,5 +154,11 @@ pcap: ""
 # Write a human-readable session log explaining each detection decision.
 log: ""
 
+# --- Offline replay corpus ----------------------------------------------------
+# Record the scan's sanitized HTTP exchanges to a replay corpus file.
+record: ""
+# Replay a corpus file through detection offline (no network); ignores targets.
+replay: ""
+
 # Note: --format/--out/--report live under output:/report: above; --oA and
 # --diff remain command-line-only (see `qphpscanner --help` and docs/USAGE.md).

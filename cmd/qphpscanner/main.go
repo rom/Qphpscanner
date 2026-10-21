@@ -26,6 +26,7 @@ import (
 	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/portspec"
 	"github.com/rom/qphpscanner/internal/probe"
+	"github.com/rom/qphpscanner/internal/replay"
 	"github.com/rom/qphpscanner/internal/report"
 	"github.com/rom/qphpscanner/internal/scanner"
 	"github.com/rom/qphpscanner/internal/version"
@@ -116,20 +117,9 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Extra targets from a file or stdin.
-	fileTargets, err := readTargetsFile(f.targetsFile)
-	if err != nil {
-		return err
-	}
-	targets = append(targets, fileTargets...)
-
-	if len(targets) == 0 {
-		fs.Usage()
-		return fmt.Errorf("no targets given (pass targets as arguments, --targets-file, --config, or use --web)")
-	}
-
 	// Build the vulnerability catalogue, merging any external feeds (native,
-	// OSV or CSAF — auto-detected).
+	// OSV or CSAF — auto-detected). Done before the targets check so --replay,
+	// which needs no targets, still picks up loaded feeds/packs.
 	if len(f.vulnFeeds) > 0 {
 		cat := php.DefaultCatalog()
 		for _, src := range f.vulnFeeds {
@@ -176,6 +166,24 @@ func run(args []string) error {
 		opts.ComposerFiles = append(opts.ComposerFiles, data)
 	}
 
+	// Offline replay: run a recorded corpus through the detection pipeline with
+	// no network. It needs no targets.
+	if f.replayPath != "" {
+		return runReplay(f, opts, outFmt, outFile, repFmt, repFile)
+	}
+
+	// Extra targets from a file or stdin.
+	fileTargets, err := readTargetsFile(f.targetsFile)
+	if err != nil {
+		return err
+	}
+	targets = append(targets, fileTargets...)
+
+	if len(targets) == 0 {
+		fs.Usage()
+		return fmt.Errorf("no targets given (pass targets as arguments, --targets-file, --config, --replay, or use --web)")
+	}
+
 	reporter := newProgressReporter(os.Stderr, f.verbose, f.quiet)
 	opts.OnProgress = reporter.handle
 	opts.DisableDNSEnum = f.noDNSEnum
@@ -194,6 +202,29 @@ func run(args []string) error {
 		result.Summary.HostsScanned, result.Summary.OpenPorts,
 		result.Summary.PHPConfirmed+result.Summary.PHPLikely, result.Meta.DurationMS)
 
+	if f.failOn != "" && report.FailOn(result, f.failOn) {
+		return &exitError{code: 2}
+	}
+	return nil
+}
+
+// runReplay loads a corpus and runs it through detection offline, emitting the
+// result like a normal scan.
+func runReplay(f *flags, opts scanner.Options, outFmt, outFile, repFmt, repFile string) error {
+	corpus, err := replay.Load(f.replayPath)
+	if err != nil {
+		return err
+	}
+	result, err := scanner.ReplayCorpus(corpus, opts)
+	if err != nil {
+		return err
+	}
+	if err := emitResults(result, f, outFmt, outFile, repFmt, repFile); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "replayed %d exchange(s) over %d service(s), %d PHP service(s)\n",
+		len(corpus.Exchanges), result.Summary.ServicesProbed,
+		result.Summary.PHPConfirmed+result.Summary.PHPLikely)
 	if f.failOn != "" && report.FailOn(result, f.failOn) {
 		return &exitError{code: 2}
 	}
@@ -383,6 +414,7 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		opts.CheckpointPath = cfg.Resume
 		opts.PCAPPath = cfg.PCAP
 		opts.LogPath = cfg.Log
+		opts.RecordPath = cfg.Record
 		if len(cfg.Headers) > 0 {
 			opts.Headers = parseHeaders(stringSlice(cfg.Headers))
 		}
@@ -457,6 +489,9 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 	if set["log"] {
 		opts.LogPath = f.logPath
 	}
+	if set["record"] {
+		opts.RecordPath = f.recordPath
+	}
 	if len(f.headers) > 0 {
 		opts.Headers = parseHeaders(f.headers)
 	}
@@ -485,6 +520,9 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		}
 		if !set["targets-file"] && !set["iL"] && cfg.TargetsFile != "" {
 			f.targetsFile = cfg.TargetsFile
+		}
+		if !set["replay"] && cfg.Replay != "" {
+			f.replayPath = cfg.Replay
 		}
 		// Feeds and catalogues from config run before any from the CLI.
 		f.vulnFeeds = append(stringSlice(cfg.VulnFeeds), f.vulnFeeds...)
