@@ -36,14 +36,17 @@ internal/
                      as raw-IPv4 TCP conversations with valid checksums
   php                PHP detection, fingerprinting, vuln correlation (the core)
                      — catalog.go (data-driven vuln/EOL catalogue + feed loader),
-                     vulndb.go (built-in data), cms.go (CMS version detection),
-                     favicon.go (mmh3 favicon hash)
+                     feeds_import.go (OSV + CSAF importers), vulndb.go (built-in
+                     data), cms.go (CMS version detection), favicon.go (mmh3
+                     favicon hash), faviconcat.go (favicon-hash → product map),
+                     signatures*.go (header/cookie/body signature catalogues)
   securitytxt        RFC 9116 security.txt discovery and parsing
   webserver          web-server identification + reverse-proxy/CDN/WAF/LB detection
   dnsenum            subdomain discovery for "*.domain" via Certificate Transparency
   scanner            orchestration: expand → connect → probe → analyse → aggregate;
-                     enrich.go (DNS, jitter, per-host gate), checkpoint.go (resume),
-                     audit.go (PCAP capture + decision log via a probe.Recorder)
+                     a host-level scheduler (HostConcurrency) over a global
+                     service-concurrency pool; enrich.go (DNS, jitter, per-host
+                     gate), checkpoint.go (resume), audit.go (PCAP + decision log)
   report             rendering: text, JSON, XML, RTF, PDF (from one doc model)
   config             YAML-subset parser and typed configuration
   web                embedded single-page GUI + JSON API over the scanner
@@ -182,10 +185,14 @@ affected ranges (`branch` / `introduced` / `fixed` / `lt`), matched against the
 parsed version. The built-in catalogue holds ~40 high-signal PHP-core CVEs plus
 famous CMS-core CVEs (Drupalgeddon2, WordPress/Joomla core), keyed by framework.
 
-External **feeds** (JSON, schema `qphpscanner-vuln-feed/1`) are loaded from a
-file or URL and `Merge`d on top of the built-in data, overriding EOL dates by
-branch — so the catalogue can be kept current without rebuilding. The feed
-format is the same `FeedEntry`/`RangeSpec` model exposed as JSON.
+External **feeds** are loaded from a file or URL and `Merge`d on top of the
+built-in data, overriding EOL dates by branch — so the catalogue can be kept
+current without rebuilding. `ParseFeed` sniffs the JSON and accepts three
+formats: the native `qphpscanner-vuln-feed/1` schema (the `FeedEntry`/
+`RangeSpec` model exposed as JSON), **OSV** records (single or array), and
+**CSAF 2.0** advisories. `feeds_import.go` maps OSV/CSAF into the same model —
+PHP-core advisories to the PHP list, Packagist/product names to a normalised
+framework key, version ranges to introduced/fixed/eq bounds.
 
 CMS core versions are detected (`cms.go`) from generator meta tags,
 `readme.html`, `CHANGELOG.txt` and Joomla manifests, then correlated against
