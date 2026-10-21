@@ -68,7 +68,7 @@ async function runScan() {
   controller = new AbortController();
 
   try {
-    const resp = await fetch("/api/scan", {
+    const resp = await fetch("api/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -399,7 +399,7 @@ function renderSecurityTxt(st) {
 
 async function refreshHistory() {
   try {
-    const resp = await fetch("/api/history");
+    const resp = await fetch("api/history");
     if (!resp.ok) return;
     const data = await resp.json();
     const scans = data.scans || [];
@@ -435,7 +435,7 @@ function renderHistoryEntry(scan) {
   dl.appendChild(el("span", null, "Download:"));
   for (const fmt of ["json", "csv", "sarif", "html", "pdf"]) {
     const a = el("a", null, fmt.toUpperCase());
-    a.href = `/api/download?scan=${encodeURIComponent(scan.id)}&format=${fmt}`;
+    a.href = `api/download?scan=${encodeURIComponent(scan.id)}&format=${fmt}`;
     dl.appendChild(a);
   }
   d.appendChild(dl);
@@ -446,7 +446,7 @@ function renderHistoryEntry(scan) {
     if (!d.open || loaded) return;
     loaded = true;
     try {
-      const resp = await fetch(`/api/download?scan=${encodeURIComponent(scan.id)}&format=json`);
+      const resp = await fetch(`api/download?scan=${encodeURIComponent(scan.id)}&format=json`);
       const result = await resp.json();
       body.replaceChildren();
       for (const t of result.targets || []) body.appendChild(renderHost(t));

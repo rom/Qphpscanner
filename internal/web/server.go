@@ -64,8 +64,56 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/scan", s.handleScan)
 	mux.HandleFunc("GET /api/download", s.handleDownload)
 	mux.HandleFunc("GET /api/history", s.handleHistory)
+	// Any other /api/ request (wrong method, unknown path) gets a clean JSON
+	// error instead of falling through to the file server, whose 404/405 for a
+	// POST is opaque to the GUI.
+	mux.HandleFunc("/api/", s.handleAPIFallback)
 	mux.Handle("/", fileServer)
-	return s.authMiddleware(mux)
+	// CORS/OPTIONS handling wraps auth so a browser preflight (which carries no
+	// credentials) is answered before the auth check, letting the GUI work when
+	// it is served through a reverse proxy or preview on a different origin.
+	return s.corsMiddleware(s.authMiddleware(mux))
+}
+
+// corsMiddleware answers CORS preflight (OPTIONS) requests for the API and adds
+// permissive CORS headers so the GUI works cross-origin (e.g. behind a preview
+// proxy). It only touches /api/ paths; static assets are untouched.
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			if origin := r.Header.Get("Origin"); origin != "" {
+				h := w.Header()
+				h.Set("Access-Control-Allow-Origin", origin)
+				h.Add("Vary", "Origin")
+				h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// handleAPIFallback returns a clear JSON error for an API request that matched
+// no specific route: a 405 (with Allow) when the path is known but the method
+// is wrong, otherwise a 404.
+func (s *Server) handleAPIFallback(w http.ResponseWriter, r *http.Request) {
+	known := map[string]string{
+		"/api/scan":     http.MethodPost,
+		"/api/download": http.MethodGet,
+		"/api/history":  http.MethodGet,
+	}
+	if want, ok := known[r.URL.Path]; ok {
+		w.Header().Set("Allow", want+", OPTIONS")
+		writeJSON(w, http.StatusMethodNotAllowed, streamMsg{Type: "error",
+			Error: fmt.Sprintf("method %s not allowed on %s (use %s)", r.Method, r.URL.Path, want)})
+		return
+	}
+	writeJSON(w, http.StatusNotFound, streamMsg{Type: "error",
+		Error: "unknown API endpoint " + r.URL.Path})
 }
 
 // authMiddleware enforces Basic auth when credentials are configured.
