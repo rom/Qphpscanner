@@ -43,6 +43,10 @@ type Meta struct {
 	AllowBlock bool   `json:"allow_block,omitempty" xml:"allow_block,omitempty"`
 	CatalogPHP int    `json:"catalog_php,omitempty" xml:"catalog_php,omitempty"`
 	CatalogCMS int    `json:"catalog_cms,omitempty" xml:"catalog_cms,omitempty"`
+	// SignaturePacks lists the external detection-signature packs active for
+	// this scan ("id" or "id@version"), so a diff can attribute a detection
+	// change to a loaded pack rather than the target.
+	SignaturePacks []string `json:"signature_packs,omitempty" xml:"signature_packs>pack,omitempty"`
 }
 
 // Summary holds roll-up counts for quick triage.

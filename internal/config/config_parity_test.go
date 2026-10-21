@@ -28,6 +28,9 @@ vuln_feeds:
   - https://example/b.json
 favicon_catalogs:
   - fav.json
+signature_packs:
+  - pack-a.json
+  - https://example/pack-b.json
 headers:
   - "X-A: 1"
   - "X-B: 2"
@@ -64,6 +67,9 @@ web:
 	}
 	if len(c.VulnFeeds) != 2 || len(c.FaviconCatalogs) != 1 {
 		t.Errorf("feeds: %+v %+v", c.VulnFeeds, c.FaviconCatalogs)
+	}
+	if len(c.SignaturePacks) != 2 || c.SignaturePacks[0] != "pack-a.json" {
+		t.Errorf("signature_packs: %+v", c.SignaturePacks)
 	}
 	if len(c.Headers) != 2 {
 		t.Errorf("headers = %+v", c.Headers)

@@ -229,7 +229,19 @@ func provenanceNotes(o, n *scanner.ScanResult) []string {
 		notes = append(notes, fmt.Sprintf("vuln catalogue: php %d/cms %d → php %d/cms %d",
 			om.CatalogPHP, om.CatalogCMS, nm.CatalogPHP, nm.CatalogCMS))
 	}
+	if op, np := strings.Join(om.SignaturePacks, ","), strings.Join(nm.SignaturePacks, ","); op != np {
+		notes = append(notes, "signature packs: "+packsLabel(op)+" → "+packsLabel(np))
+	}
 	return notes
+}
+
+// packsLabel renders a comma-joined signature-pack list for a provenance note,
+// using "none" for the empty case.
+func packsLabel(s string) string {
+	if s == "" {
+		return "none"
+	}
+	return s
 }
 
 // WriteDiff renders a diff as text or JSON.
