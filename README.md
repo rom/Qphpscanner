@@ -204,7 +204,8 @@ qphpscanner --config scan.yaml
 
 See [`docs/USAGE.md`](docs/USAGE.md) for the full reference and
 [`docs/DESIGN.md`](docs/DESIGN.md) for architecture and detection internals.
-A man page is in [`docs/qphpscanner.1`](docs/qphpscanner.1).
+A man page is in [`docs/qphpscanner.1`](docs/qphpscanner.1), and release notes
+are in [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 ## Web GUI
 
