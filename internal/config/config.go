@@ -51,6 +51,8 @@ type Config struct {
 	// Data / resume / targets.
 	VulnFeeds        []string
 	FaviconCatalogs  []string
+	Allow            []string
+	Block            []string
 	FailOn           string
 	Resume           string
 	VerifySubdomains *bool
@@ -130,6 +132,8 @@ func Load(path string) (*Config, error) {
 	c.Headers = getHeaders(m, "headers")
 	c.VulnFeeds = getStringSlice(m, "vuln_feeds")
 	c.FaviconCatalogs = getStringSlice(m, "favicon_catalogs")
+	c.Allow = getStringSlice(m, "allow")
+	c.Block = getStringSlice(m, "block")
 
 	if v, ok, err := getInt(m, "per_host_concurrency"); err != nil {
 		return nil, err

@@ -112,6 +112,11 @@ vuln_feeds:
   - docs/vuln-feed.example.json
 # External favicon-hash → product catalogues (file or URL).
 favicon_catalogs: []
+# Allow/block lists override the target list. Each entry is an exact host/IP,
+# a CIDR block, or a "*.domain" / ".domain" suffix. When allow is non-empty,
+# only matching targets are scanned; block drops matching targets afterwards.
+allow: []
+block: []
 # Exit non-zero when a finding meets this severity: low|medium|high|critical|eol.
 fail_on: ""
 # Checkpoint file: record completed services and resume from it.

@@ -18,7 +18,15 @@
     </div>
   </header>
 
-  <main class="layout">
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab active" data-view="scan" role="tab">Scan</button>
+    <button type="button" class="tab" data-view="compare" role="tab">Compare</button>
+    <button type="button" class="tab" data-view="stats" role="tab">Statistics</button>
+    <button type="button" class="tab" data-view="info" role="tab">Info</button>
+  </nav>
+
+  <main>
+   <div id="view-scan" class="view layout">
     <section class="panel form-panel" aria-label="Scan configuration">
       <h2>New scan</h2>
       <form id="scan-form">
@@ -86,6 +94,15 @@
           <div></div>
         </div>
 
+        <details class="advanced">
+          <summary>Allow / block lists (override the target list)</summary>
+          <label for="allow">Allow list</label>
+          <textarea id="allow" rows="2" placeholder="*.example.com&#10;10.0.0.0/24"></textarea>
+          <label for="block">Block list</label>
+          <textarea id="block" rows="2" placeholder="192.168.1.5&#10;.internal"></textarea>
+          <p class="hint">One pattern per line: exact host/IP, CIDR, or *.domain / .domain suffix. Allow keeps only matches; block drops matches.</p>
+        </details>
+
         <div class="btn-row">
           <button type="submit" id="scan-btn" class="primary">Scan</button>
           <button type="button" id="cancel-btn" class="secondary hidden">Cancel</button>
@@ -115,13 +132,59 @@
         <div id="progress-log" class="progress-log" aria-live="polite"></div>
       </div>
       <div id="summary" class="summary"></div>
-      <div id="results"></div>
+      <div id="results" class="resizable"></div>
 
       <div id="history-wrap" class="history-wrap hidden">
         <h3>Previous scans</h3>
         <div id="history"></div>
       </div>
     </section>
+   </div>
+
+   <div id="view-compare" class="view hidden">
+     <section class="panel">
+       <h2>Compare scans</h2>
+       <p class="hint">Load any two retained scans — or an older one against the latest — and see what changed.</p>
+       <div class="grid2">
+         <div>
+           <label for="cmp-a">Scan A (baseline / older)</label>
+           <select id="cmp-a"></select>
+         </div>
+         <div>
+           <label for="cmp-b">Scan B (compare / newer)</label>
+           <select id="cmp-b"></select>
+         </div>
+       </div>
+       <div class="btn-row">
+         <button type="button" id="cmp-run" class="primary">Compare</button>
+         <button type="button" id="cmp-refresh" class="secondary">Refresh list</button>
+       </div>
+       <div id="cmp-result"></div>
+     </section>
+   </div>
+
+   <div id="view-stats" class="view hidden">
+     <section class="panel">
+       <div class="results-head">
+         <h2>Statistics</h2>
+         <button type="button" id="stats-refresh" class="secondary">Refresh</button>
+       </div>
+       <p class="hint">Aggregated across all retained scans in this session.</p>
+       <div id="stats-body"></div>
+     </section>
+   </div>
+
+   <div id="view-info" class="view hidden">
+     <section class="panel">
+       <div class="results-head">
+         <h2>Findings explorer</h2>
+         <button type="button" id="info-refresh" class="secondary">Refresh</button>
+       </div>
+       <p class="hint">Every framework, addon/tool and vulnerability seen, as tags. Click a tag to list the scan items that carry it.</p>
+       <div id="info-tags"></div>
+       <div id="info-items"></div>
+     </section>
+   </div>
   </main>
 
   <footer class="footer">

@@ -70,7 +70,49 @@ if (targetsClearEl) {
   });
 }
 
+// ---------- tabs ----------
+let overviewCache = null;
+for (const tab of document.querySelectorAll(".tab")) {
+  tab.addEventListener("click", () => showView(tab.dataset.view));
+}
+
+function showView(name) {
+  for (const t of document.querySelectorAll(".tab")) {
+    t.classList.toggle("active", t.dataset.view === name);
+  }
+  for (const v of document.querySelectorAll(".view")) {
+    v.classList.toggle("hidden", v.id !== "view-" + name);
+  }
+  if (name === "compare") refreshCompareList();
+  if (name === "stats") loadOverview().then(renderStats);
+  if (name === "info") loadOverview().then(renderInfo);
+}
+
+async function loadOverview(force) {
+  if (overviewCache && !force) return overviewCache;
+  try {
+    const resp = await fetch("api/overview");
+    overviewCache = resp.ok ? await resp.json() : null;
+  } catch (_) {
+    overviewCache = null;
+  }
+  return overviewCache;
+}
+
+// Invalidate caches after a scan so stats/info/compare reflect new data.
+function invalidateOverview() { overviewCache = null; }
+
+const splitList = (s) =>
+  (s || "")
+    .split(/\r?\n|,/)
+    .map((x) => x.trim())
+    .filter((x) => x && !x.startsWith("#"));
+
 document.addEventListener("DOMContentLoaded", refreshHistory);
+$("cmp-run") && $("cmp-run").addEventListener("click", runCompare);
+$("cmp-refresh") && $("cmp-refresh").addEventListener("click", refreshCompareList);
+$("stats-refresh") && $("stats-refresh").addEventListener("click", () => loadOverview(true).then(renderStats));
+$("info-refresh") && $("info-refresh").addEventListener("click", () => loadOverview(true).then(renderInfo));
 
 async function runScan() {
   const targets = $("targets").value;
@@ -93,6 +135,8 @@ async function runScan() {
     resolve_dns: $("resolvedns").checked,
     banners: $("banners").checked,
     host_concurrency: parseInt($("hostconc").value, 10) || 0,
+    allow: splitList($("allow").value),
+    block: splitList($("block").value),
   };
 
   scanBtn.disabled = true;
@@ -169,6 +213,7 @@ async function runScan() {
     render(result);
     setStatus(`Done in ${result.meta.duration_ms} ms · ${result.summary.hosts_scanned} host(s).`);
     downloadsEl.classList.remove("hidden");
+    invalidateOverview();
     refreshHistory();
   } catch (err) {
     if (err.name === "AbortError") {
@@ -262,12 +307,18 @@ function renderHost(t) {
     group.appendChild(dns);
   }
   for (const svc of t.services || []) {
-    group.appendChild(renderService(svc));
+    group.appendChild(renderService(svc, t));
   }
   return group;
 }
 
-function renderService(svc) {
+function isIPHost(host) {
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true;       // IPv4
+  if (host.includes(":") && /^[0-9a-f:]+$/i.test(host)) return true; // IPv6
+  return false;
+}
+
+function renderService(svc, target) {
   const verdict = svc.php ? svc.php.verdict : "none";
   const card = el("div", "svc v-" + verdict);
 
@@ -279,6 +330,14 @@ function renderService(svc) {
     head.appendChild(el("span", "badge none", "closed"));
   }
   card.appendChild(head);
+
+  // Show the DNS name (and any resolved A/PTR records) at the top of the card
+  // whenever the scanned host is a hostname or DNS was resolved.
+  const dnsBits = [];
+  if (svc.host && !isIPHost(svc.host)) dnsBits.push("DNS name: " + svc.host);
+  if (target && target.addresses && target.addresses.length) dnsBits.push("A: " + target.addresses.join(", "));
+  if (target && target.ptr && target.ptr.length) dnsBits.push("PTR: " + target.ptr.join(", "));
+  if (dnsBits.length) card.appendChild(el("div", "svc-dns", dnsBits.join(" · ")));
 
   const kv = el("dl", "kv");
   const add = (k, v) => {
@@ -524,4 +583,192 @@ function el(tag, cls, text) {
   if (cls) n.className = cls;
   if (text !== undefined && text !== null) n.textContent = text;
   return n;
+}
+
+/* ---------- compare ---------- */
+
+let compareScans = [];
+
+async function refreshCompareList() {
+  try {
+    const resp = await fetch("api/history");
+    const data = resp.ok ? await resp.json() : { scans: [] };
+    compareScans = data.scans || [];
+  } catch (_) {
+    compareScans = [];
+  }
+  const label = (s) => `${formatTime(s.at)} · ${s.mode} · ${s.summary.hosts_scanned} host(s)`;
+  for (const [id, pick] of [["cmp-a", 1], ["cmp-b", 0]]) {
+    const sel = $(id);
+    if (!sel) continue;
+    sel.replaceChildren();
+    compareScans.forEach((s, i) => {
+      const o = el("option", null, label(s));
+      o.value = s.id;
+      if (i === pick) o.selected = true;
+      sel.appendChild(o);
+    });
+    if (!compareScans.length) {
+      const o = el("option", null, "— no scans yet —");
+      o.value = "";
+      sel.appendChild(o);
+    }
+  }
+}
+
+async function runCompare() {
+  const a = $("cmp-a").value;
+  const b = $("cmp-b").value;
+  const out = $("cmp-result");
+  out.replaceChildren();
+  if (!a || !b) {
+    out.appendChild(el("p", "empty", "Run at least two scans to compare."));
+    return;
+  }
+  try {
+    const resp = await fetch(`api/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+    renderDiff(out, data.diff);
+  } catch (err) {
+    out.appendChild(el("p", "error", "Compare failed: " + err.message));
+  }
+}
+
+function renderDiff(out, diff) {
+  if (!diff || (!(diff.added_services || []).length && !(diff.removed_services || []).length && !(diff.changed || []).length)) {
+    out.appendChild(el("p", "empty", "No differences between the two scans."));
+    return;
+  }
+  const list = (title, cls, urls) => {
+    if (!urls || !urls.length) return;
+    const g = el("div", "diff-group");
+    g.appendChild(el("h4", cls, `${title} (${urls.length})`));
+    const ul = el("ul", "item-list");
+    for (const u of urls) ul.appendChild(el("li", null, u));
+    g.appendChild(ul);
+    out.appendChild(g);
+  };
+  list("Added services", "diff-added", diff.added_services);
+  list("Removed services", "diff-removed", diff.removed_services);
+  if ((diff.changed || []).length) {
+    const g = el("div", "diff-group");
+    g.appendChild(el("h4", null, `Changed (${diff.changed.length})`));
+    const ul = el("ul", "item-list");
+    for (const c of diff.changed) {
+      const li = el("li", null, c.url);
+      const bits = [];
+      if (c.verdict_change) bits.push("verdict " + c.verdict_change);
+      if (c.version_change) bits.push("version " + c.version_change);
+      if ((c.new_vulns || []).length) bits.push("+vulns " + c.new_vulns.join(", "));
+      if ((c.resolved_vulns || []).length) bits.push("-vulns " + c.resolved_vulns.join(", "));
+      if (bits.length) li.appendChild(el("span", "when", bits.join(" · ")));
+      ul.appendChild(li);
+    }
+    g.appendChild(ul);
+    out.appendChild(g);
+  }
+}
+
+/* ---------- statistics ---------- */
+
+function renderStats(ov) {
+  const body = $("stats-body");
+  body.replaceChildren();
+  if (!ov || ov.stats.scans === 0) {
+    body.appendChild(el("p", "empty", "No scans yet — run a scan first."));
+    return;
+  }
+  const s = ov.stats;
+  const tiles = el("div", "summary");
+  const tile = (label, val) => {
+    const box = el("div", "stat");
+    box.appendChild(el("div", "n", String(val)));
+    box.appendChild(el("div", "l", label));
+    tiles.appendChild(box);
+  };
+  tile("Scans", s.scans);
+  tile("Services", s.services);
+  tile("PHP services", s.php_services);
+  tile("Highest severity", (s.highest_severity || "none").toUpperCase());
+  tile("Avg scan", s.avg_scan_ms + " ms");
+  if (s.oldest_php) tile("Oldest PHP", s.oldest_php.version);
+  if (s.oldest_app) tile("Oldest app", s.oldest_app.name + " " + s.oldest_app.version);
+  body.appendChild(tiles);
+
+  if (s.oldest_php) body.appendChild(el("p", "note", `Oldest PHP ${s.oldest_php.version} on ${s.oldest_php.host} (${s.oldest_php.url})`));
+  if (s.oldest_app) body.appendChild(el("p", "note", `Oldest application ${s.oldest_app.name} ${s.oldest_app.version} on ${s.oldest_app.host}`));
+
+  body.appendChild(topList("Top vulnerabilities", s.top_vulns, true));
+  body.appendChild(topList("Top applications", s.top_apps, false));
+  body.appendChild(topList("Top networks", s.top_networks, false));
+}
+
+function topList(title, rows, withSev) {
+  const g = el("div", "tag-section");
+  g.appendChild(el("h3", null, title));
+  if (!rows || !rows.length) {
+    g.appendChild(el("p", "empty", "—"));
+    return g;
+  }
+  const ul = el("ul", "item-list");
+  for (const r of rows) {
+    const li = el("li");
+    if (withSev && r.severity) li.appendChild(el("span", "sev " + (r.severity || "low"), (r.severity || "").toUpperCase()));
+    li.appendChild(document.createTextNode(" " + r.key));
+    li.appendChild(el("span", "when", "×" + r.count));
+    ul.appendChild(li);
+  }
+  g.appendChild(ul);
+  return g;
+}
+
+/* ---------- info / findings explorer ---------- */
+
+function renderInfo(ov) {
+  const tagsEl = $("info-tags");
+  const itemsEl = $("info-items");
+  tagsEl.replaceChildren();
+  itemsEl.replaceChildren();
+  if (!ov || ov.stats.scans === 0) {
+    tagsEl.appendChild(el("p", "empty", "No scans yet — run a scan first."));
+    return;
+  }
+
+  const showItems = (group) => {
+    itemsEl.replaceChildren();
+    for (const t of tagsEl.querySelectorAll(".tag")) t.classList.remove("active");
+    const h = el("h3", null, `${group.name} — ${group.count} item(s)`);
+    itemsEl.appendChild(h);
+    const ul = el("ul", "item-list");
+    for (const it of group.items || []) {
+      const li = el("li", null, it.host + "  " + it.url);
+      li.appendChild(el("span", "when", it.at));
+      ul.appendChild(li);
+    }
+    itemsEl.appendChild(ul);
+  };
+
+  const section = (title, groups, severityClass) => {
+    if (!groups || !groups.length) return;
+    const sec = el("div", "tag-section");
+    sec.appendChild(el("h3", null, title));
+    for (const g of groups) {
+      let cls = "tag";
+      if (severityClass && g.severity) cls += " sev-" + g.severity;
+      const chip = el("span", cls);
+      chip.appendChild(document.createTextNode(g.name));
+      chip.appendChild(el("span", "tag-count", "×" + g.count));
+      chip.addEventListener("click", () => {
+        showItems(g);
+        chip.classList.add("active");
+      });
+      sec.appendChild(chip);
+    }
+    tagsEl.appendChild(sec);
+  };
+
+  section("Frameworks / applications", ov.frameworks, false);
+  section("Addons / tools", ov.addons, false);
+  section("Vulnerabilities", ov.vulns, true);
 }
