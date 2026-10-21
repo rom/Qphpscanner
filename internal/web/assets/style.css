@@ -101,8 +101,11 @@ details.advanced > summary { cursor: pointer; font-size: .82rem; color: var(--ac
 .diff-removed { color: var(--red); }
 .svc-dns { font-size: .76rem; color: var(--text-dim); font-family: ui-monospace, Menlo, Consolas, monospace; margin: 2px 0 0; word-break: break-all; }
 
-/* results sub-tabs (Results / Failures) */
-.result-tabs { display: flex; gap: 4px; margin: 10px 0 8px; }
+/* results sub-tabs (Results / PHP / Failures) */
+.result-tabs { display: flex; gap: 4px; margin: 10px 0 8px; align-items: center; }
+.sort-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.sort-label { margin: 0; font-size: .74rem; color: var(--text-dim); font-weight: 600; }
+.sort-select { width: auto; padding: 5px 8px; font-size: .8rem; }
 .result-tabs.hidden { display: none; }
 .rtab {
   background: var(--bg-elev);

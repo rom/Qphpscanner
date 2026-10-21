@@ -14,7 +14,28 @@ var (
 	reJoomlaGen       = regexp.MustCompile(`(?i)<meta[^>]+name=["']generator["'][^>]+content=["']Joomla!? ([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
 	reMediaWikiGen    = regexp.MustCompile(`(?i)<meta[^>]+name=["']generator["'][^>]+content=["']MediaWiki ([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
 	reTYPO3Gen        = regexp.MustCompile(`(?i)<meta[^>]+name=["']generator["'][^>]+content=["']TYPO3 CMS ([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
+	// Nextcloud/ownCloud expose product and version in status.php's JSON.
+	reCloudProduct    = regexp.MustCompile(`(?i)"productname"\s*:\s*"([^"]+)"`)
+	reCloudVersionStr = regexp.MustCompile(`(?i)"versionstring"\s*:\s*"([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
+	// Magento exposes "Magento/2.4.6 (Community)" at /magento_version.
+	reMagentoVersion = regexp.MustCompile(`(?i)Magento/([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
+	// Drupal also advertises its version in the X-Generator header.
+	reDrupalVer = regexp.MustCompile(`(?i)Drupal ([0-9]+(?:\.[0-9]+)*)`)
 )
+
+// canonCloud maps a status.php productname to the canonical PHP groupware name,
+// or "" for products that are not the PHP Nextcloud/ownCloud codebase.
+func canonCloud(product string) string {
+	p := strings.ToLower(strings.TrimSpace(product))
+	switch {
+	case strings.Contains(p, "nextcloud"):
+		return "Nextcloud"
+	case strings.Contains(p, "owncloud") && !strings.Contains(p, "infinite scale"):
+		return "ownCloud"
+	default:
+		return ""
+	}
+}
 
 // detectCMSVersions extracts CMS/framework core versions from the collected
 // bodies, preferring the most specific (most dotted) version seen for each.
@@ -76,6 +97,36 @@ func detectCMSVersions(in Input, fwSet map[string]bool, addEv func(Evidence), ad
 		}
 		if m := reTYPO3Gen.FindStringSubmatch(b.text); m != nil {
 			consider("TYPO3", m[1], b.url)
+		}
+		if strings.Contains(lu, "magento_version") {
+			if m := reMagentoVersion.FindStringSubmatch(b.text); m != nil {
+				consider("Magento", m[1], b.url)
+			}
+		}
+		// Nextcloud/ownCloud status.php: productname + versionstring together.
+		if mp := reCloudProduct.FindStringSubmatch(b.text); mp != nil {
+			if prod := canonCloud(mp[1]); prod != "" {
+				if mv := reCloudVersionStr.FindStringSubmatch(b.text); mv != nil {
+					consider(prod, mv[1], b.url)
+				}
+			}
+		}
+	}
+
+	// Drupal's version also appears in the X-Generator response header.
+	consumeGen := func(vals []string) {
+		for _, g := range vals {
+			if m := reDrupalVer.FindStringSubmatch(g); m != nil {
+				consider("Drupal", m[1], "X-Generator header")
+			}
+		}
+	}
+	if in.Root != nil {
+		consumeGen(in.Root.HeaderValues("X-Generator"))
+	}
+	for _, resp := range in.Extra {
+		if resp != nil {
+			consumeGen(resp.HeaderValues("X-Generator"))
 		}
 	}
 

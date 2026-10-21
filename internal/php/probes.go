@@ -56,6 +56,7 @@ func DeepProbePaths() []string {
 		"/status.php",
 		"/xmlrpc.php",
 		"/wp-json/",
+		"/magento_version",
 	}
 }
 

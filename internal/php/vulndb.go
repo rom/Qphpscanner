@@ -466,6 +466,22 @@ var builtinCMS = map[string][]FeedEntry{
 			Affected: []RangeSpec{rng("8.0", "8.6.10")},
 		},
 	},
+	"magento": {
+		{
+			ID: "CVE-2022-24086", Severity: "critical",
+			Title:       "Magento / Adobe Commerce: pre-auth remote code execution",
+			Description: "Improper input validation during the checkout flow allows unauthenticated remote code execution. Exploited in the wild.",
+			Reference:   nvd + "CVE-2022-24086",
+			Affected:    []RangeSpec{rng("2.3.0", "2.3.8"), rng("2.4.0", "2.4.4")},
+		},
+		{
+			ID: "CVE-2024-34102", Severity: "critical",
+			Title:       "Magento / Adobe Commerce: XXE nested deserialization (CosmicSting)",
+			Description: "Improper restriction of XML external entity references enables information disclosure and, chained, remote code execution. Exploited in the wild.",
+			Reference:   nvd + "CVE-2024-34102", Note: "fixed in 2.4.7-p1 / 2.4.6-p6 / 2.4.5-p8 / 2.4.4-p9",
+			Affected: []RangeSpec{rng("2.3.0", "2.4.8")},
+		},
+	},
 	"joomla": {
 		{
 			ID: "CVE-2023-23752", Severity: "medium",
