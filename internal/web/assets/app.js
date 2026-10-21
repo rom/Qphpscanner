@@ -209,6 +209,7 @@ async function runScan() {
     resolve_dns: $("resolvedns").checked,
     banners: $("banners").checked,
     host_concurrency: parseInt($("hostconc").value, 10) || 0,
+    request_budget: parseInt($("reqbudget").value, 10) || 0,
     allow: splitList($("allow").value),
     block: splitList($("block").value),
     resolve: splitList($("resolve").value),

@@ -35,6 +35,7 @@ type Config struct {
 	HostConcurrency    int
 	Jitter             string
 	Retries            int
+	RequestBudget      int
 
 	// Enrichment.
 	ResolveDNS *bool
@@ -155,6 +156,11 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	} else if ok {
 		c.Retries = v
+	}
+	if v, ok, err := getInt(m, "request_budget"); err != nil {
+		return nil, err
+	} else if ok {
+		c.RequestBudget = v
 	}
 	if v, ok, err := getFloat(m, "rate"); err != nil {
 		return nil, err

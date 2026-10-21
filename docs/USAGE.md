@@ -14,6 +14,7 @@ or as a local web GUI.
 - [Ports](#ports)
 - [TLS](#tls)
 - [Scan depth](#scan-depth-detect-vs-deep)
+- [Adaptive deep-mode discovery](#adaptive-deep-mode-discovery)
 - [Output formats](#output-formats)
 - [Report formats](#report-formats)
 - [Configuration file](#configuration-file)
@@ -298,6 +299,35 @@ Example — compare a Cloudflare-fronted site against its origin:
 - `--per-host-concurrency N` — at most N concurrent probes against one host.
 - `--jitter DUR` — sleep a random time up to DUR before each service probe.
 - `--retries N` — retry transient network failures N times with backoff.
+- `--request-budget N` — cap the number of deep-mode probe requests per service
+  (host:port) at N (0 = unlimited). See below.
+
+## Adaptive deep-mode discovery
+
+Deep mode no longer fires a fixed list of probe paths at every service. It is
+**two-phase and evidence-driven**:
+
+1. **Phase 1** issues the base request plus a small, always-safe *core* set:
+   the `OPTIONS` request, the soft-404 control, favicon and a few status
+   endpoints, generic PHP diagnostics (`/phpinfo.php`, `/opcache.php`, …) and
+   project metadata (`/composer.json`, `/.env`, …).
+2. **Phase 2** issues an application's own endpoints *only after* phase 1 shows
+   evidence of that application — WordPress paths (`/wp-login.php`, `/wp-json/`,
+   …) after a WordPress generator/cookie/header, Laravel paths after a Laravel
+   signal, phpMyAdmin paths after a pma marker, and so on. The trigger → paths
+   mapping is data-driven (`php.ConditionalProbes`).
+
+This only ever *reduces or reorders* requests — it never adds an intrusive one —
+so a host is not asked for endpoints it shows no sign of running.
+
+`--request-budget N` caps the total deep-mode probes issued per service. Every
+fetch counts against it; essential probes (the `OPTIONS` request and the
+soft-404 control) always run, but optional and app-specific probes stop once the
+budget is spent. A server **`Retry-After`** on a `429`/`503` likewise
+short-circuits the remaining optional probes rather than retrying blindly. When
+discovery is cut short it is recorded on the result (a `discovery` block in JSON
+/ XML output), and a [diff](#diffing-scans) reports those endpoints as *not
+fully reassessed* rather than claiming their absent findings resolved.
 
 ## Enrichment
 

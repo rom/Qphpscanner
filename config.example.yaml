@@ -86,6 +86,12 @@ host_concurrency: 0
 jitter: 0s
 # Extra attempts on a transient network error.
 retries: 0
+# Max deep-mode probe requests per service/host (0 = unlimited). Deep mode
+# probes adaptively — a small always-safe core set first, then an application's
+# endpoints only once that application has shown itself — and this caps the
+# total so a host is never hammered. A server Retry-After (429/503) likewise
+# stops the remaining optional probes rather than retrying blindly.
+request_budget: 0
 
 # --- Enrichment ---------------------------------------------------------------
 # Add forward and reverse DNS for each host.

@@ -103,6 +103,10 @@ func classifyCoverage(s scanner.ServiceResult) (state, reason string) {
 			return "challenged", fmt.Sprintf("HTTP %d", s.HTTP.Status)
 		case s.Proxy != nil && len(s.Proxy.WAF) > 0 && (s.PHP == nil || s.PHP.Verdict == "" || string(s.PHP.Verdict) == "none"):
 			return "challenged", "WAF in front (" + strings.Join(s.Proxy.WAF, ", ") + ")"
+		case s.Discovery != nil && s.Discovery.Limited == "budget":
+			return "budget-limited", "deep-probe request budget exhausted"
+		case s.Discovery != nil && s.Discovery.Limited == "retry-after":
+			return "challenged", "Retry-After back-off"
 		default:
 			return "responded", ""
 		}
@@ -114,6 +118,14 @@ func classifyCoverage(s scanner.ServiceResult) (state, reason string) {
 		return "unreachable", firstNonEmpty(s.Error, "port closed/filtered")
 	}
 	return "unreachable", firstNonEmpty(s.Error, "no HTTP response")
+}
+
+// budgetLabel renders a per-service request budget for a provenance note.
+func budgetLabel(n int) string {
+	if n <= 0 {
+		return "unlimited"
+	}
+	return strconv.Itoa(n)
 }
 
 func firstNonEmpty(a, b string) string {
@@ -225,6 +237,7 @@ func provenanceNotes(o, n *scanner.ScanResult) []string {
 	add("auth sent", yesno(om.Auth), yesno(nm.Auth))
 	add("connection pinned", yesno(om.Pinned), yesno(nm.Pinned))
 	add("allow/block lists", yesno(om.AllowBlock), yesno(nm.AllowBlock))
+	add("request budget", budgetLabel(om.RequestBudget), budgetLabel(nm.RequestBudget))
 	if om.CatalogPHP != nm.CatalogPHP || om.CatalogCMS != nm.CatalogCMS {
 		notes = append(notes, fmt.Sprintf("vuln catalogue: php %d/cms %d → php %d/cms %d",
 			om.CatalogPHP, om.CatalogCMS, nm.CatalogPHP, nm.CatalogCMS))

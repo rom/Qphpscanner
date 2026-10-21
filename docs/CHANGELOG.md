@@ -8,6 +8,23 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Adaptive deep-mode discovery (politeness + relevance):** deep mode is now
+  two-phase and evidence-driven. Phase 1 issues the base request plus a small,
+  always-safe *core* set (the `OPTIONS` request, the soft-404 control, favicon,
+  status endpoints, generic PHP diagnostics and Composer/`.env` metadata); an
+  application's own endpoints are issued in phase 2 **only after** phase 1 shows
+  evidence of that app (WordPress paths after a WordPress signal, Laravel paths
+  after a Laravel signal, phpMyAdmin after a pma marker, …), driven by a
+  data-driven `{trigger → paths}` map. A configurable **per-service request
+  budget** (`--request-budget`, config `request_budget`, web field) caps the
+  total probes so a host is never hammered — essential probes always run,
+  optional and app-specific probes stop once it is spent — and a server
+  **`Retry-After`** on a `429`/`503` short-circuits the remaining optional
+  probes rather than retrying blindly. When discovery is cut short it is
+  recorded on the result (`discovery` block) and reflected in scan diffing as a
+  *budget-limited* / *challenged* coverage state, so absent findings there are
+  not claimed resolved. Discovery only ever reduces or reorders requests.
+
 - **Composer dependency inventory & package advisories:** when a
   `composer.json` / `composer.lock` / `vendor/composer/installed.json` is
   web-exposed (or supplied with `--composer-file`, config `composer_files`, or

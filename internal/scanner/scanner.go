@@ -82,6 +82,11 @@ type Options struct {
 	Jitter time.Duration
 	// Retries is the number of extra attempts on a transient network error.
 	Retries int
+	// RequestBudget caps the number of deep-mode probe requests issued per
+	// service (host:port) so a host is never hammered (0 = unlimited). Essential
+	// probes (the OPTIONS request and the soft-404 control) always run; optional
+	// and app-specific probes stop once the budget is spent.
+	RequestBudget int
 
 	// --- Enrichment ---
 	// ResolveDNS adds forward and reverse DNS for each host.
@@ -381,22 +386,23 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 
 	out := &ScanResult{
 		Meta: Meta{
-			Tool:       version.Name,
-			Version:    version.Version,
-			Mode:       opts.Mode,
-			StartedAt:  start,
-			FinishedAt: time.Now(),
-			DurationMS: time.Since(start).Milliseconds(),
-			Ports:      opts.Ports,
-			TLSMode:    opts.TLSMode,
-			TimeoutMS:  opts.Timeout.Milliseconds(),
-			Follow:     opts.Follow,
-			Insecure:   opts.Insecure,
-			Auth:       opts.Cookie != "" || opts.BearerToken != "" || opts.BasicUser != "" || opts.BasicPass != "",
-			Pinned:     len(opts.Resolve) > 0 || opts.SNIServerName != "",
-			AllowBlock: len(opts.Allowlist) > 0 || len(opts.Blocklist) > 0,
-			CatalogPHP: catPHP,
-			CatalogCMS: catCMS,
+			Tool:          version.Name,
+			Version:       version.Version,
+			Mode:          opts.Mode,
+			StartedAt:     start,
+			FinishedAt:    time.Now(),
+			DurationMS:    time.Since(start).Milliseconds(),
+			Ports:         opts.Ports,
+			TLSMode:       opts.TLSMode,
+			TimeoutMS:     opts.Timeout.Milliseconds(),
+			Follow:        opts.Follow,
+			Insecure:      opts.Insecure,
+			Auth:          opts.Cookie != "" || opts.BearerToken != "" || opts.BasicUser != "" || opts.BasicPass != "",
+			Pinned:        len(opts.Resolve) > 0 || opts.SNIServerName != "",
+			AllowBlock:    len(opts.Allowlist) > 0 || len(opts.Blocklist) > 0,
+			CatalogPHP:    catPHP,
+			CatalogCMS:    catCMS,
+			RequestBudget: opts.RequestBudget,
 		},
 	}
 	for _, h := range hostOrder {
@@ -577,26 +583,6 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 		res.SecurityTxt = fetchSecurityTxt(ctx, fetcher, base)
 	}
 
-	// Active identification probes (deep mode): an OPTIONS request, a
-	// guaranteed-404 to harvest the error-page server signature/WAF block page,
-	// and a few status endpoints. These feed web-server/proxy fingerprinting
-	// and PHP version leakage.
-	var fpExtra []*probe.Response
-	var notFound *probe.Response
-	if opts.Mode == ModeDeep {
-		fpExtra = append(fpExtra, fetcher.Request(ctx, "OPTIONS", base+"/"))
-		notFound = fetcher.Get(ctx, base+"/qphpscanner_probe_404")
-		fpExtra = append(fpExtra, notFound)
-		for _, p := range serverStatusPaths() {
-			fpExtra = append(fpExtra, fetcher.Get(ctx, base+p))
-		}
-	}
-
-	// Web server / reverse proxy / CDN / WAF identification.
-	wsRes := webserver.Analyze(root, fpExtra)
-	res.Server = &wsRes.Server
-	res.Proxy = &wsRes.Proxy
-
 	// Build PHP analysis input.
 	in := php.Input{
 		TargetURL:     res.URL,
@@ -605,28 +591,93 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 		Catalog:       opts.Catalog,
 		ComposerFiles: opts.ComposerFiles,
 	}
-	if in.Deep {
-		in.Extra = map[string]*probe.Response{}
-		for _, p := range php.DeepProbePaths() {
-			if p == "/" {
-				continue
-			}
-			u := base + ensureLeadingSlash(p)
-			in.Extra[u] = fetcher.Get(ctx, u)
-		}
-		// The 404 page can leak a PHP version via an Apache signature, and also
-		// serves as the soft-404 baseline for catch-all detection.
-		if notFound != nil {
-			in.Extra[base+"/qphpscanner_probe_404"] = notFound
-			in.Control = notFound
-		}
-		in.EasterCredits = fetcher.Get(ctx, base+"/"+php.EasterEggCredits)
-		in.EasterLogo = fetcher.Get(ctx, base+"/"+php.EasterEggLogo)
-		in.Favicon = fetcher.Get(ctx, base+php.FaviconPath)
-		in.PathInfo = fetcher.Get(ctx, base+php.PathInfoProbe)
+
+	if !in.Deep {
+		// Web server / reverse proxy / CDN / WAF identification (no deep probes).
+		wsRes := webserver.Analyze(root, nil)
+		res.Server = &wsRes.Server
+		res.Proxy = &wsRes.Proxy
+		res.PHP = php.Analyze(in)
+		res.DurationMS = time.Since(start).Milliseconds()
+		return res
 	}
 
-	res.PHP = php.Analyze(in)
+	// Deep mode: adaptive, two-phase, budgeted probing. A per-service request
+	// budget and a server Retry-After can cut the optional-probe schedule short;
+	// essential probes (OPTIONS + soft-404 control) always run.
+	disc := newDiscovery(ctx, fetcher, opts.RequestBudget)
+
+	// --- Essential identification probes ---
+	// An OPTIONS request and a guaranteed-404 (which harvests the error-page
+	// server signature/WAF block page and is the soft-404 baseline).
+	var fpExtra []*probe.Response
+	fpExtra = append(fpExtra, disc.request("OPTIONS", base+"/"))
+	notFound := disc.get(base + php.ControlProbePath)
+	fpExtra = append(fpExtra, notFound)
+
+	// --- Phase 1: generic, always-relevant probes (budget-gated) ---
+	for _, p := range serverStatusPaths() {
+		if r := disc.optional(base + p); r != nil {
+			fpExtra = append(fpExtra, r)
+		}
+	}
+
+	// Web server / reverse proxy / CDN / WAF identification.
+	wsRes := webserver.Analyze(root, fpExtra)
+	res.Server = &wsRes.Server
+	res.Proxy = &wsRes.Proxy
+
+	in.Extra = map[string]*probe.Response{}
+	addExtra := func(url string, r *probe.Response) {
+		if r != nil {
+			in.Extra[url] = r
+		}
+	}
+	for _, p := range php.CoreProbePaths() {
+		u := base + ensureLeadingSlash(p)
+		addExtra(u, disc.optional(u))
+	}
+	// The 404 page can leak a PHP version via an Apache signature, and also
+	// serves as the soft-404 baseline for catch-all detection.
+	if notFound != nil {
+		in.Extra[base+php.ControlProbePath] = notFound
+		in.Control = notFound
+	}
+	in.EasterCredits = disc.optional(base + "/" + php.EasterEggCredits)
+	in.EasterLogo = disc.optional(base + "/" + php.EasterEggLogo)
+	in.Favicon = disc.optional(base + php.FaviconPath)
+	in.PathInfo = disc.optional(base + php.PathInfoProbe)
+
+	// Phase 1 analysis decides which apps have shown themselves.
+	prelim := php.Analyze(in)
+
+	// --- Phase 2: app-specific probes, only after a trigger signal ---
+	apps := detectedApps(prelim)
+	added := false
+	for _, ap := range php.ConditionalProbes() {
+		if !apps[strings.ToLower(ap.Trigger)] {
+			continue
+		}
+		for _, p := range ap.Paths {
+			u := base + ensureLeadingSlash(p)
+			if _, done := in.Extra[u]; done {
+				continue
+			}
+			if r := disc.optional(u); r != nil {
+				in.Extra[u] = r
+				added = true
+			}
+		}
+	}
+
+	// Re-analyse with the full evidence set only when phase 2 added anything;
+	// otherwise the phase-1 result is already final.
+	det := prelim
+	if added {
+		det = php.Analyze(in)
+	}
+	res.PHP = det
+	res.Discovery = disc.result()
 	res.DurationMS = time.Since(start).Milliseconds()
 	return res
 }

@@ -347,6 +347,7 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		opts.PerHostConcurrency = cfg.PerHostConcurrency
 		opts.HostConcurrency = cfg.HostConcurrency
 		opts.Retries = cfg.Retries
+		opts.RequestBudget = cfg.RequestBudget
 		opts.ResolveDNS = boolVal(cfg.ResolveDNS, false)
 		opts.GrabBanners = boolVal(cfg.Banners, false)
 		opts.VerifySubdomains = boolVal(cfg.VerifySubdomains, false)
@@ -395,6 +396,9 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 	}
 	if set["retries"] {
 		opts.Retries = f.retries
+	}
+	if set["request-budget"] {
+		opts.RequestBudget = f.requestBudget
 	}
 	if set["resolve-dns"] {
 		opts.ResolveDNS = f.resolveDNS

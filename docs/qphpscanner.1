@@ -134,6 +134,19 @@ Sleep a random time up to this before each service probe.
 .BI \-\-retries " n"
 Retry transient network failures n times with backoff.
 .TP
+.BI \-\-request\-budget " n"
+Cap the number of deep-mode probe requests issued per service (host:port) at n
+(0 = unlimited). Deep mode discovers adaptively: it issues a small core set of
+always-safe probes first and only requests an application's endpoints once that
+application has shown itself. The budget bounds the total, so a host is never
+hammered; essential probes (the OPTIONS request and the soft-404 control) always
+run, and optional and app-specific probes stop once the budget is spent. A
+server
+.B Retry\-After
+on a 429/503 likewise short-circuits the remaining optional probes rather than
+retrying blindly. When discovery is cut short it is recorded on the result so a
+diff reports those endpoints as not fully reassessed.
+.TP
 .BI \-\-header " 'Name: value'"
 Add a request header (repeatable).
 .TP

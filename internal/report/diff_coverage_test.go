@@ -102,6 +102,48 @@ func TestDiffReassessedClosedIsRemoved(t *testing.T) {
 	}
 }
 
+func TestDiffBudgetLimitedLeavesUnconfirmed(t *testing.T) {
+	old := oneScan(phpSvc("https://h/", 200, "CVE-B"))
+	// A 200 response whose deep-probe schedule was cut short by the budget: the
+	// absent finding must not be claimed resolved.
+	limited := phpSvc("https://h/", 200)
+	limited.Discovery = &scanner.Discovery{ProbesIssued: 3, Budget: 3, Limited: "budget"}
+	c := changeFor(Diff(old, oneScan(limited)), "https://h/")
+	if c == nil || c.Coverage != "budget-limited" {
+		t.Fatalf("expected budget-limited coverage, got %+v", c)
+	}
+	if len(c.ResolvedVulns) != 0 {
+		t.Errorf("budget-limited endpoint must not resolve findings: %+v", c)
+	}
+	if len(c.UnconfirmedVulns) != 1 || c.UnconfirmedVulns[0] != "CVE-B" {
+		t.Errorf("expected CVE-B left unconfirmed: %+v", c)
+	}
+}
+
+func TestDiffRetryAfterChallenged(t *testing.T) {
+	old := oneScan(phpSvc("https://h/", 200, "CVE-R"))
+	limited := phpSvc("https://h/", 200)
+	limited.Discovery = &scanner.Discovery{ProbesIssued: 3, Limited: "retry-after", RetryAfterMS: 5000}
+	c := changeFor(Diff(old, oneScan(limited)), "https://h/")
+	if c == nil || c.Coverage != "challenged" {
+		t.Fatalf("expected a Retry-After back-off to read as challenged, got %+v", c)
+	}
+	if len(c.UnconfirmedVulns) != 1 {
+		t.Errorf("expected the finding left unconfirmed: %+v", c)
+	}
+}
+
+func TestDiffBudgetProvenanceNote(t *testing.T) {
+	old := oneScan(phpSvc("https://h/", 200))
+	nw := oneScan(phpSvc("https://h/", 200))
+	old.Meta = scanner.Meta{Mode: "deep", TLSMode: "auto", TimeoutMS: 10000}
+	nw.Meta = scanner.Meta{Mode: "deep", TLSMode: "auto", TimeoutMS: 10000, RequestBudget: 10}
+	notes := strings.Join(Diff(old, nw).ProvenanceNotes, " | ")
+	if !strings.Contains(notes, "request budget: unlimited → 10") {
+		t.Errorf("missing request-budget note: %q", notes)
+	}
+}
+
 func TestDiffProvenanceNotes(t *testing.T) {
 	old := oneScan(phpSvc("https://h/", 200))
 	nw := oneScan(phpSvc("https://h/", 200))

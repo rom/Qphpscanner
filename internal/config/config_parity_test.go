@@ -73,6 +73,19 @@ web:
 	}
 }
 
+func TestRequestBudgetConfig(t *testing.T) {
+	c, err := loadString(t, "request_budget: 12\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.RequestBudget != 12 {
+		t.Fatalf("request_budget = %d, want 12", c.RequestBudget)
+	}
+	if _, err := loadString(t, "request_budget: plenty\n"); err == nil {
+		t.Error("expected error for non-numeric request_budget")
+	}
+}
+
 func TestResolveAndSNIConfig(t *testing.T) {
 	c, err := loadString(t, "sni: origin.example.com\nresolve:\n  - \"example.com:443:203.0.113.10\"\n  - \"example.com:80:203.0.113.10\"\n")
 	if err != nil {

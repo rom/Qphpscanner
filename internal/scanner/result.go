@@ -43,6 +43,9 @@ type Meta struct {
 	AllowBlock bool   `json:"allow_block,omitempty" xml:"allow_block,omitempty"`
 	CatalogPHP int    `json:"catalog_php,omitempty" xml:"catalog_php,omitempty"`
 	CatalogCMS int    `json:"catalog_cms,omitempty" xml:"catalog_cms,omitempty"`
+	// RequestBudget is the per-service deep-mode probe budget in effect
+	// (0 = unlimited); a change between scans can explain coverage differences.
+	RequestBudget int `json:"request_budget,omitempty" xml:"request_budget,omitempty"`
 }
 
 // Summary holds roll-up counts for quick triage.
@@ -84,10 +87,32 @@ type ServiceResult struct {
 	Proxy       *webserver.ProxyInfo     `json:"proxy,omitempty" xml:"proxy,omitempty"`
 	PHP         *php.Detection           `json:"php,omitempty" xml:"php,omitempty"`
 	SecurityTxt *securitytxt.SecurityTxt `json:"security_txt,omitempty" xml:"security_txt,omitempty"`
-	DurationMS  int64                    `json:"duration_ms" xml:"duration_ms"`
+	// Discovery summarises adaptive deep-mode probing for this service: how many
+	// probes were issued, the per-service request budget (0 = unlimited) and
+	// whether the optional-probe schedule was cut short (budget exhausted or a
+	// server Retry-After back-off). Nil in detect mode and when no budget was set
+	// and nothing was limited, so older scans and plain deep scans are unchanged.
+	Discovery  *Discovery `json:"discovery,omitempty" xml:"discovery,omitempty"`
+	DurationMS int64      `json:"duration_ms" xml:"duration_ms"`
 	// CheckedAt is when this endpoint was probed (the moment the scan of this
 	// service began). Zero for results restored from an older checkpoint.
 	CheckedAt time.Time `json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+}
+
+// Discovery records how deep-mode adaptive probing was bounded for one service.
+type Discovery struct {
+	// ProbesIssued is the number of deep-mode probe requests actually issued
+	// (every fetch is counted).
+	ProbesIssued int `json:"probes_issued" xml:"probes_issued"`
+	// Budget is the configured per-service request budget (0 = unlimited).
+	Budget int `json:"budget,omitempty" xml:"budget,omitempty"`
+	// Limited is why the optional-probe schedule stopped early: "budget" (the
+	// per-service cap was reached) or "retry-after" (the host returned 429/503
+	// and we backed off). Empty when discovery ran to completion.
+	Limited string `json:"limited,omitempty" xml:"limited,omitempty"`
+	// RetryAfterMS is the Retry-After back-off the host asked for (clamped),
+	// when one was seen.
+	RetryAfterMS int64 `json:"retry_after_ms,omitempty" xml:"retry_after_ms,omitempty"`
 }
 
 // HTTPInfo is a serialisable summary of the primary HTTP response.
