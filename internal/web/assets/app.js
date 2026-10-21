@@ -311,6 +311,7 @@ let scanRender = null;
 let sortMode = "scan";
 
 function beginScanRender() {
+  activeFilter = null;
   scanRender = {
     pendingClear: true,
     okList: [],
@@ -358,7 +359,7 @@ function onServiceMsg(svc) {
   ensureCleared();
   if (isProductive(svc)) {
     scanRender.okList.push(svc);
-    renderBucket(resultsEl, scanRender.okList, sortMode);
+    renderResultsTab();
     if (isPHPResult(svc)) {
       scanRender.phpList.push(svc);
       renderBucket(phpResultsEl, scanRender.phpList, sortMode);
@@ -422,7 +423,7 @@ function updateResultCounts() {
 // changes.
 function resortResults() {
   if (!scanRender || scanRender.pendingClear) return;
-  renderBucket(resultsEl, scanRender.okList, sortMode);
+  renderResultsTab();
   renderBucket(phpResultsEl, scanRender.phpList, sortMode);
 }
 
@@ -446,7 +447,7 @@ function finishScanRender(result) {
       if (isPHPResult(svc)) scanRender.phpList.push(svc);
     }
   }
-  renderBucket(resultsEl, scanRender.okList, sortMode);
+  renderResultsTab();
   renderBucket(phpResultsEl, scanRender.phpList, sortMode);
   updateResultCounts();
   if (scanRender.okList.length === 0 && scanRender.failList.length === 0) {
@@ -475,6 +476,17 @@ function friendlyScanError(m) {
   return "The scan failed (" + m + "). Any results collected so far are shown below.";
 }
 
+// RESULT_FILTERS maps a clickable summary tile to the predicate that keeps a
+// service on the Results tab. Tiles not listed here are plain counters.
+const RESULT_FILTERS = {
+  "HTTP": (s) => !!(s.port_open && s.http),
+  "PHP confirmed": (s) => s.php && s.php.verdict === "confirmed",
+  "PHP likely": (s) => s.php && s.php.verdict === "likely",
+  "Vuln leads": (s) => s.php && s.php.vulnerabilities && s.php.vulnerabilities.length > 0,
+  "security.txt": (s) => s.security_txt && s.security_txt.present,
+};
+let activeFilter = null;
+
 function renderSummary(s) {
   summaryEl.replaceChildren();
   const stats = [
@@ -490,7 +502,40 @@ function renderSummary(s) {
     const box = el("div", "stat");
     box.appendChild(el("div", "n", String(n)));
     box.appendChild(el("div", "l", label));
+    if (RESULT_FILTERS[label]) {
+      box.classList.add("stat-click");
+      box.dataset.filter = label;
+      box.classList.toggle("active", activeFilter === label);
+      box.title = "Click to show only " + label + " results on the Results tab (click again to clear)";
+      box.addEventListener("click", () => toggleFilter(label));
+    }
     summaryEl.appendChild(box);
+  }
+}
+
+// toggleFilter applies/clears a summary-tile filter on the Results tab.
+function toggleFilter(label) {
+  activeFilter = activeFilter === label ? null : label;
+  for (const t of summaryEl.querySelectorAll(".stat-click")) {
+    t.classList.toggle("active", t.dataset.filter === activeFilter);
+  }
+  showResultTab("ok");
+  renderResultsTab();
+}
+
+// renderResultsTab draws the Results tab, applying the active summary filter.
+function renderResultsTab() {
+  if (!scanRender) return;
+  const pred = activeFilter ? RESULT_FILTERS[activeFilter] : null;
+  const list = pred ? scanRender.okList.filter(pred) : scanRender.okList;
+  renderBucket(resultsEl, list, sortMode);
+  if (pred) {
+    const note = el(
+      "div",
+      "filter-note",
+      `Filtered by “${activeFilter}”: ${list.length} of ${scanRender.okList.length}. Click the tile again to clear.`
+    );
+    resultsEl.insertBefore(note, resultsEl.firstChild);
   }
 }
 

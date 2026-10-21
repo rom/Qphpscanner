@@ -282,6 +282,19 @@ button.secondary:hover { background: var(--bg-elev); }
 }
 .stat .n { font-size: 1.3rem; font-weight: 700; }
 .stat .l { font-size: .72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .4px; }
+.stat-click { cursor: pointer; transition: border-color .12s, background .12s; }
+.stat-click:hover { border-color: var(--accent); }
+.stat-click.active { border-color: var(--accent); background: var(--accent); }
+.stat-click.active .n, .stat-click.active .l { color: #fff; }
+.filter-note {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  font-size: .78rem;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
 
 .host-group { margin-top: 18px; }
 .host-group > h3 { margin: 0 0 8px; font-size: .95rem; color: var(--text-dim); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
