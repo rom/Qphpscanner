@@ -8,6 +8,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Web GUI: the **Failures** tab has a sort control — scan order, or grouped
+  **by failure type** (i/o timeouts first, then other errors).
 - **Coverage-aware scan diffing:** a comparison now distinguishes a finding
   that genuinely went away (the endpoint was reassessed) from one that could
   not be re-checked — a timeout, WAF challenge, auth requirement, or a
