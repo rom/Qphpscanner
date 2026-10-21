@@ -49,6 +49,11 @@ type Options struct {
 
 	// OnProgress, when set, receives incremental progress events.
 	OnProgress ProgressFunc
+	// OnService, when set, receives every completed service result as it
+	// finishes — including closed/filtered and errored ones, before the
+	// closed-port output filter — so streaming consumers can render partial
+	// results that survive a cancellation or timeout.
+	OnService func(ServiceResult)
 	// DisableDNSEnum turns off "*.domain" subdomain enumeration.
 	DisableDNSEnum bool
 	// Enumerator overrides the default Certificate Transparency enumerator
@@ -270,10 +275,15 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 			audit.logService(res)
 		}
 		results[idx] = res
-		if opts.OnProgress != nil {
+		if opts.OnService != nil || opts.OnProgress != nil {
 			progMu.Lock()
-			doneCount++
-			opts.OnProgress(serviceEvent(res, doneCount, total))
+			if opts.OnService != nil {
+				opts.OnService(res)
+			}
+			if opts.OnProgress != nil {
+				doneCount++
+				opts.OnProgress(serviceEvent(res, doneCount, total))
+			}
 			progMu.Unlock()
 		}
 	}

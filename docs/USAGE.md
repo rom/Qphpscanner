@@ -212,7 +212,11 @@ card shows the **DNS name** and any resolved **A/PTR** records at its top.
 The GUI has four tabs:
 
 - **Scan** — configure and run a scan, watch progress, browse results and the
-  previous-scan history.
+  previous-scan history. Results stream in live and are split into a
+  **Results** tab (services that answered) and a **Failures** tab (closed or
+  filtered ports, connection errors, timeouts, open non-HTTP ports). If a scan
+  errors or times out, whatever was collected so far stays on screen — it is
+  never wiped — and an error banner explains what happened.
 - **Compare** — pick any two retained scans (or an older one against the
   latest) and see added/removed services and per-service verdict, version and
   vulnerability changes.
