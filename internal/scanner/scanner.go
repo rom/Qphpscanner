@@ -108,6 +108,9 @@ type Options struct {
 	// --- Data ---
 	// Catalog supplies vulnerability/EOL data (nil = built-in default).
 	Catalog *php.Catalog
+	// ComposerFiles are operator-supplied Composer file contents merged into the
+	// dependency inventory for projects whose files are not web-exposed.
+	ComposerFiles [][]byte
 
 	// --- Resume ---
 	// CheckpointPath records completed services so a scan can resume.
@@ -596,10 +599,11 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 
 	// Build PHP analysis input.
 	in := php.Input{
-		TargetURL: res.URL,
-		Deep:      opts.Mode == ModeDeep,
-		Root:      root,
-		Catalog:   opts.Catalog,
+		TargetURL:     res.URL,
+		Deep:          opts.Mode == ModeDeep,
+		Root:          root,
+		Catalog:       opts.Catalog,
+		ComposerFiles: opts.ComposerFiles,
 	}
 	if in.Deep {
 		in.Extra = map[string]*probe.Response{}

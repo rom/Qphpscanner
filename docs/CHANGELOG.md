@@ -8,6 +8,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Composer dependency inventory & package advisories:** when a
+  `composer.json` / `composer.lock` / `vendor/composer/installed.json` is
+  web-exposed (or supplied with `--composer-file`, config `composer_files`, or
+  the web uploader), qphpscanner parses a dependency inventory — classifying
+  each package as *required* / *required-dev* / *locked* / *installed* — and
+  correlates concrete package versions against advisory leads (built-in, plus a
+  `packages:` map in external `--vuln-feed` data). The Composer `php` platform
+  constraint is kept separate from the detected runtime version. Shown in
+  output, reports and the web result card; bounded and back-compatible.
+
 - **Version-uncertainty model & vulnerability prerequisites:** detection now
   keeps every version observation with its source (header, phpinfo, Apache
   signature, …) and flags a **version conflict** when sources disagree at the

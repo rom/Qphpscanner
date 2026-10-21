@@ -170,6 +170,12 @@ is set.
 Load a favicon-hash → product catalogue (JSON) to attribute matched site
 favicons. Repeatable.
 .TP
+.BI \-\-composer\-file " file"
+Supply a local
+.IR composer.json ", " composer.lock " or " installed.json
+(sniffed by content) to build the dependency inventory for a project whose
+Composer files are not web-exposed. Repeatable.
+.TP
 .BI \-\-allow " pattern"
 Keep only targets whose host matches \fIpattern\fR (an exact host/IP, a CIDR
 block, or a \fB*.domain\fR / \fB.domain\fR suffix). Repeatable.

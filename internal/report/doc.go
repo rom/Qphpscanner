@@ -296,6 +296,23 @@ func renderPHP(d *document, det *php.Detection) {
 		}
 		d.text("NOTE: vulnerability leads are correlated from the detected version only; confirm each against the live service and configuration.")
 	}
+
+	if c := det.Composer; c != nil && (len(c.Packages) > 0 || c.PHPRequire != "") {
+		d.text(fmt.Sprintf("Composer dependency inventory (%d package(s)):", len(c.Packages)))
+		if c.PHPRequire != "" {
+			d.bullet("requires PHP " + c.PHPRequire + " (Composer constraint, not the running version)")
+		}
+		for _, p := range c.Packages {
+			d.bullet(fmt.Sprintf("%s %s [%s]", p.Name, p.Version, p.Class))
+			for _, v := range p.Vulnerabilities {
+				suffix := ""
+				if v.Applicability == "contradicted" {
+					suffix = " (likely N/A here)"
+				}
+				d.bullet(fmt.Sprintf("    %s [%s] %s%s", v.ID, strings.ToUpper(v.Severity), v.Title, suffix))
+			}
+		}
+	}
 }
 
 func renderSecurityTxt(d *document, st *securitytxt.SecurityTxt) {

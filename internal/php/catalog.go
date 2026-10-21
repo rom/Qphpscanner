@@ -116,7 +116,9 @@ type VulnFeed struct {
 	Generated string                 `json:"generated,omitempty"`
 	PHP       []FeedEntry            `json:"php,omitempty"`
 	CMS       map[string][]FeedEntry `json:"cms,omitempty"`
-	EOL       map[string]string      `json:"eol,omitempty"`
+	// Packages holds advisories keyed by a Composer package name (vendor/name).
+	Packages map[string][]FeedEntry `json:"packages,omitempty"`
+	EOL      map[string]string      `json:"eol,omitempty"`
 }
 
 // Catalog holds the active vulnerability and end-of-life data: the built-in
@@ -124,6 +126,7 @@ type VulnFeed struct {
 type Catalog struct {
 	php []FeedEntry
 	cms map[string][]FeedEntry
+	pkg map[string][]FeedEntry
 	eol map[string]string
 }
 
@@ -132,10 +135,14 @@ func DefaultCatalog() *Catalog {
 	c := &Catalog{
 		php: append([]FeedEntry(nil), builtinPHP...),
 		cms: map[string][]FeedEntry{},
+		pkg: map[string][]FeedEntry{},
 		eol: map[string]string{},
 	}
 	for k, v := range builtinCMS {
 		c.cms[strings.ToLower(k)] = append([]FeedEntry(nil), v...)
+	}
+	for k, v := range builtinPackages {
+		c.pkg[strings.ToLower(k)] = append([]FeedEntry(nil), v...)
 	}
 	for k, v := range builtinEOL {
 		c.eol[k] = v
@@ -156,6 +163,13 @@ func (c *Catalog) Merge(f *VulnFeed) {
 	for k, entries := range f.CMS {
 		key := strings.ToLower(k)
 		c.cms[key] = append(c.cms[key], entries...)
+	}
+	if c.pkg == nil {
+		c.pkg = map[string][]FeedEntry{}
+	}
+	for k, entries := range f.Packages {
+		key := strings.ToLower(k)
+		c.pkg[key] = append(c.pkg[key], entries...)
 	}
 	if c.eol == nil {
 		c.eol = map[string]string{}
@@ -189,6 +203,21 @@ func (c *Catalog) CorrelatePHP(variant, version string, facts ...ObservedFacts) 
 		return nil
 	}
 	return matchEntries(c.php, version, "version-correlation", optFacts(facts))
+}
+
+// CorrelatePackage returns leads for a Composer package at a concrete version.
+func (c *Catalog) CorrelatePackage(name, version string, facts ...ObservedFacts) []Vulnerability {
+	if name == "" || version == "" {
+		return nil
+	}
+	entries, ok := c.pkg[strings.ToLower(name)]
+	if !ok {
+		return nil
+	}
+	if _, _, _, ok := parseVersion(version); !ok {
+		return nil
+	}
+	return matchEntries(entries, version, name+" package-correlation", optFacts(facts))
 }
 
 // CorrelateCMS returns leads for a detected CMS/framework core version.

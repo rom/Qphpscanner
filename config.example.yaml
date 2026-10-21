@@ -118,6 +118,9 @@ vuln_feeds:
   - docs/vuln-feed.example.json
 # External favicon-hash → product catalogues (file or URL).
 favicon_catalogs: []
+# Operator-supplied Composer files (composer.json / composer.lock /
+# installed.json) to inventory a project whose files are not web-exposed.
+composer_files: []
 # Allow/block lists override the target list. Each entry is an exact host/IP,
 # a CIDR block, or a "*.domain" / ".domain" suffix. When allow is non-empty,
 # only matching targets are scanned; block drops matching targets afterwards.

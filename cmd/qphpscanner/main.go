@@ -151,6 +151,15 @@ func run(args []string) error {
 		fmt.Fprintf(os.Stderr, "loaded %d favicon catalogue entries from %s\n", n, src)
 	}
 
+	// Load any operator-supplied Composer files for the dependency inventory.
+	for _, path := range f.composerFiles {
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return fmt.Errorf("read composer file %q: %w", path, rerr)
+		}
+		opts.ComposerFiles = append(opts.ComposerFiles, data)
+	}
+
 	reporter := newProgressReporter(os.Stderr, f.verbose, f.quiet)
 	opts.OnProgress = reporter.handle
 	opts.DisableDNSEnum = f.noDNSEnum
@@ -460,6 +469,7 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		// Feeds and catalogues from config run before any from the CLI.
 		f.vulnFeeds = append(stringSlice(cfg.VulnFeeds), f.vulnFeeds...)
 		f.faviconCatalogs = append(stringSlice(cfg.FaviconCatalogs), f.faviconCatalogs...)
+		f.composerFiles = append(stringSlice(cfg.ComposerFiles), f.composerFiles...)
 	}
 
 	if outFmt == "" {
