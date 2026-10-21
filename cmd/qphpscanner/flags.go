@@ -43,10 +43,11 @@ type flags struct {
 	noDNSEnum     bool
 
 	// politeness
-	rate    float64
-	perHost int
-	jitter  time.Duration
-	retries int
+	rate     float64
+	perHost  int
+	hostConc int
+	jitter   time.Duration
+	retries  int
 
 	// enrichment
 	resolveDNS bool
@@ -62,6 +63,7 @@ type flags struct {
 
 	// data / resume / reporting extras
 	vulnFeeds        stringSlice
+	faviconCatalogs  stringSlice
 	failOn           string
 	outAll           string
 	diffPath         string
@@ -144,6 +146,7 @@ func bindFlags(fs *flag.FlagSet) *flags {
 	// Politeness.
 	fs.Float64Var(&f.rate, "rate", 0, "max outbound HTTP requests per second (0 = unlimited)")
 	fs.IntVar(&f.perHost, "per-host-concurrency", 0, "max concurrent probes per host (0 = unlimited)")
+	fs.IntVar(&f.hostConc, "host-concurrency", 0, "max distinct hosts scanned at once (0 = no host cap)")
 	fs.DurationVar(&f.jitter, "jitter", 0, "random delay up to this before each service probe")
 	fs.IntVar(&f.retries, "retries", 0, "extra attempts on a transient network error")
 
@@ -160,7 +163,8 @@ func bindFlags(fs *flag.FlagSet) *flags {
 	fs.StringVar(&f.proxy, "proxy", "", "route requests via an http(s):// or socks5:// proxy")
 
 	// Vulnerability data / resume / reporting extras.
-	fs.Var(&f.vulnFeeds, "vuln-feed", "external vulnerability feed file or URL (repeatable)")
+	fs.Var(&f.vulnFeeds, "vuln-feed", "external vuln feed: native, OSV or CSAF JSON, file or URL (repeatable)")
+	fs.Var(&f.faviconCatalogs, "favicon-catalog", "favicon-hash → product catalogue file or URL (repeatable)")
 	fs.StringVar(&f.failOn, "fail-on", "", "exit non-zero if a finding meets this severity: low|medium|high|critical|eol")
 	fs.StringVar(&f.outAll, "oA", "", "write json/xml/csv/sarif/txt outputs and an HTML report to <base>.*")
 	fs.StringVar(&f.diffPath, "diff", "", "compare against a prior JSON scan result and print the differences")

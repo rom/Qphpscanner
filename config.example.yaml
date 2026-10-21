@@ -69,13 +69,65 @@ report:
   file: ""
 
 # Web GUI. When enabled, qphpscanner serves the browser UI instead of
-# running a one-shot scan.
+# running a one-shot scan. `auth` protects it with HTTP Basic auth (user:pass).
 web:
   enabled: false
   listen: "127.0.0.1:8088"
+  auth: ""
 
-# Note: the newer scan-shaping options — rate limiting, retries, jitter,
-# per-host concurrency, DNS/banner enrichment, auth/headers/vhost/proxy,
-# vulnerability feeds, --fail-on, --diff, --resume, --oA and --targets-file —
-# are command-line flags (see `qphpscanner --help` and docs/USAGE.md). Keys for
-# them are not read from this config file.
+# --- Politeness ---------------------------------------------------------------
+# Max outbound HTTP requests per second across the whole scan (0 = unlimited).
+rate: 0
+# Max concurrent service probes per host (0 = unlimited).
+per_host_concurrency: 0
+# Max distinct hosts scanned at once (0 = no host-level cap).
+host_concurrency: 0
+# Random delay of up to this before each service probe (Go duration).
+jitter: 0s
+# Extra attempts on a transient network error.
+retries: 0
+
+# --- Enrichment ---------------------------------------------------------------
+# Add forward and reverse DNS for each host.
+resolve_dns: false
+# Grab a short service banner from open non-HTTP ports.
+banners: false
+
+# --- HTTP request shaping -----------------------------------------------------
+# Extra request headers — either a list of "Name: value" strings or a map.
+headers:
+  - "X-Scan: qphpscanner"
+# Cookie header value, Bearer token, or Basic auth (user:pass).
+cookie: ""
+bearer: ""
+basic: ""
+# Override the Host header (virtual-host scanning).
+vhost: ""
+# Route requests via an http(s):// or socks5:// proxy.
+proxy: ""
+
+# --- Data / resume / targets --------------------------------------------------
+# External vulnerability feeds (native qphpscanner, OSV or CSAF; file or URL).
+vuln_feeds:
+  - docs/vuln-feed.example.json
+# External favicon-hash → product catalogues (file or URL).
+favicon_catalogs: []
+# Exit non-zero when a finding meets this severity: low|medium|high|critical|eol.
+fail_on: ""
+# Checkpoint file: record completed services and resume from it.
+resume: ""
+# Keep only enumerated subdomains that resolve in DNS.
+verify_subdomains: false
+# Disable "*.domain" subdomain enumeration.
+no_dns_enum: false
+# Read additional targets from a file, one per line ('-' for stdin).
+targets_file: ""
+
+# --- Audit trail --------------------------------------------------------------
+# Write a libpcap capture of every HTTP exchange (opens in Wireshark/tcpdump).
+pcap: ""
+# Write a human-readable session log explaining each detection decision.
+log: ""
+
+# Note: --format/--out/--report live under output:/report: above; --oA and
+# --diff remain command-line-only (see `qphpscanner --help` and docs/USAGE.md).

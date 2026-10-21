@@ -28,6 +28,38 @@ type Config struct {
 	Output          OutputConfig
 	Report          ReportConfig
 	Web             WebConfig
+
+	// Politeness.
+	Rate               float64
+	PerHostConcurrency int
+	HostConcurrency    int
+	Jitter             string
+	Retries            int
+
+	// Enrichment.
+	ResolveDNS *bool
+	Banners    *bool
+
+	// HTTP request shaping.
+	Headers []string // "Name: value" entries
+	Cookie  string
+	Bearer  string
+	Basic   string // user:pass
+	Vhost   string
+	Proxy   string
+
+	// Data / resume / targets.
+	VulnFeeds        []string
+	FaviconCatalogs  []string
+	FailOn           string
+	Resume           string
+	VerifySubdomains *bool
+	NoDNSEnum        *bool
+	TargetsFile      string
+
+	// Audit trail.
+	PCAP string
+	Log  string
 }
 
 // OutputConfig selects the machine-readable scan output.
@@ -46,6 +78,7 @@ type ReportConfig struct {
 type WebConfig struct {
 	Enabled *bool
 	Listen  string
+	Auth    string // user:pass for HTTP Basic auth
 }
 
 // Load reads and parses a YAML config file.
@@ -83,11 +116,51 @@ func Load(path string) (*Config, error) {
 		c.MaxBodyBytes = v
 	}
 
+	c.Jitter = getString(m, "jitter")
+	c.Cookie = getString(m, "cookie")
+	c.Bearer = getString(m, "bearer")
+	c.Basic = getString(m, "basic")
+	c.Vhost = getString(m, "vhost")
+	c.Proxy = getString(m, "proxy")
+	c.FailOn = getString(m, "fail_on")
+	c.Resume = getString(m, "resume")
+	c.TargetsFile = getString(m, "targets_file")
+	c.PCAP = getString(m, "pcap")
+	c.Log = getString(m, "log")
+	c.Headers = getHeaders(m, "headers")
+	c.VulnFeeds = getStringSlice(m, "vuln_feeds")
+	c.FaviconCatalogs = getStringSlice(m, "favicon_catalogs")
+
+	if v, ok, err := getInt(m, "per_host_concurrency"); err != nil {
+		return nil, err
+	} else if ok {
+		c.PerHostConcurrency = v
+	}
+	if v, ok, err := getInt(m, "host_concurrency"); err != nil {
+		return nil, err
+	} else if ok {
+		c.HostConcurrency = v
+	}
+	if v, ok, err := getInt(m, "retries"); err != nil {
+		return nil, err
+	} else if ok {
+		c.Retries = v
+	}
+	if v, ok, err := getFloat(m, "rate"); err != nil {
+		return nil, err
+	} else if ok {
+		c.Rate = v
+	}
+
 	var perr error
 	c.FollowRedirects, perr = getBoolPtr(m, "follow_redirects", perr)
 	c.Insecure, perr = getBoolPtr(m, "insecure", perr)
 	c.SecurityTxt, perr = getBoolPtr(m, "security_txt", perr)
 	c.IncludeClosed, perr = getBoolPtr(m, "include_closed", perr)
+	c.ResolveDNS, perr = getBoolPtr(m, "resolve_dns", perr)
+	c.Banners, perr = getBoolPtr(m, "banners", perr)
+	c.VerifySubdomains, perr = getBoolPtr(m, "verify_subdomains", perr)
+	c.NoDNSEnum, perr = getBoolPtr(m, "no_dns_enum", perr)
 	if perr != nil {
 		return nil, perr
 	}
@@ -102,6 +175,7 @@ func Load(path string) (*Config, error) {
 	}
 	if web := getMap(m, "web"); web != nil {
 		c.Web.Listen = getString(web, "listen")
+		c.Web.Auth = getString(web, "auth")
 		c.Web.Enabled, perr = getBoolPtr(web, "enabled", nil)
 		if perr != nil {
 			return nil, perr
@@ -178,6 +252,46 @@ func getInt64(m map[string]interface{}, key string) (int64, bool, error) {
 		return 0, false, fmt.Errorf("config key %q: %q is not an integer", key, s)
 	}
 	return n, true, nil
+}
+
+func getFloat(m map[string]interface{}, key string) (float64, bool, error) {
+	s := getString(m, key)
+	if s == "" {
+		return 0, false, nil
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("config key %q: %q is not a number", key, s)
+	}
+	return f, true, nil
+}
+
+// getHeaders accepts either a list of "Name: value" strings or a map of
+// {Name: value} and normalises both to "Name: value" entries.
+func getHeaders(m map[string]interface{}, key string) []string {
+	v, ok := m[key]
+	if !ok {
+		return nil
+	}
+	switch t := v.(type) {
+	case []interface{}:
+		var out []string
+		for _, e := range t {
+			if s, ok := e.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case map[string]interface{}:
+		var out []string
+		for k, val := range t {
+			if s, ok := val.(string); ok {
+				out = append(out, k+": "+s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 func getBoolPtr(m map[string]interface{}, key string, prev error) (*bool, error) {

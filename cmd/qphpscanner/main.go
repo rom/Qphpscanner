@@ -119,7 +119,8 @@ func run(args []string) error {
 		return fmt.Errorf("no targets given (pass targets as arguments, --targets-file, --config, or use --web)")
 	}
 
-	// Build the vulnerability catalogue, merging any external feeds.
+	// Build the vulnerability catalogue, merging any external feeds (native,
+	// OSV or CSAF — auto-detected).
 	if len(f.vulnFeeds) > 0 {
 		cat := php.DefaultCatalog()
 		for _, src := range f.vulnFeeds {
@@ -130,6 +131,15 @@ func run(args []string) error {
 			cat.Merge(feed)
 		}
 		opts.Catalog = cat
+	}
+
+	// Register any external favicon-hash catalogues before scanning.
+	for _, src := range f.faviconCatalogs {
+		n, err := php.LoadFaviconCatalog(ctx, src, nil)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "loaded %d favicon catalogue entries from %s\n", n, src)
 	}
 
 	reporter := newProgressReporter(os.Stderr, f.verbose, f.quiet)
@@ -313,24 +323,106 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		listen = f.listen
 	}
 
-	// CLI-only options (not config-driven): apply directly.
-	opts.RateLimit = f.rate
-	opts.PerHostConcurrency = f.perHost
-	opts.Jitter = f.jitter
-	opts.Retries = f.retries
-	opts.ResolveDNS = f.resolveDNS
-	opts.GrabBanners = f.banners
-	opts.Cookie = f.cookie
-	opts.BearerToken = f.bearer
-	opts.HostHeader = f.vhost
-	opts.ProxyURL = f.proxy
-	opts.VerifySubdomains = f.verifySubdomains
-	opts.CheckpointPath = f.resume
-	opts.PCAPPath = f.pcapPath
-	opts.LogPath = f.logPath
-	opts.Headers = parseHeaders(f.headers)
-	if f.basicAuth != "" {
+	// Remaining options: config provides the base, an explicitly-set flag wins.
+	if cfg != nil {
+		opts.RateLimit = cfg.Rate
+		opts.PerHostConcurrency = cfg.PerHostConcurrency
+		opts.HostConcurrency = cfg.HostConcurrency
+		opts.Retries = cfg.Retries
+		opts.ResolveDNS = boolVal(cfg.ResolveDNS, false)
+		opts.GrabBanners = boolVal(cfg.Banners, false)
+		opts.VerifySubdomains = boolVal(cfg.VerifySubdomains, false)
+		opts.Cookie = cfg.Cookie
+		opts.BearerToken = cfg.Bearer
+		opts.HostHeader = cfg.Vhost
+		opts.ProxyURL = cfg.Proxy
+		opts.CheckpointPath = cfg.Resume
+		opts.PCAPPath = cfg.PCAP
+		opts.LogPath = cfg.Log
+		if len(cfg.Headers) > 0 {
+			opts.Headers = parseHeaders(stringSlice(cfg.Headers))
+		}
+		if cfg.Basic != "" {
+			opts.BasicUser, opts.BasicPass = splitColon(cfg.Basic)
+		}
+		if cfg.Jitter != "" {
+			d, perr := time.ParseDuration(cfg.Jitter)
+			if perr != nil {
+				err = fmt.Errorf("config jitter %q: %w", cfg.Jitter, perr)
+				return
+			}
+			opts.Jitter = d
+		}
+	}
+	if set["rate"] {
+		opts.RateLimit = f.rate
+	}
+	if set["per-host-concurrency"] {
+		opts.PerHostConcurrency = f.perHost
+	}
+	if set["host-concurrency"] {
+		opts.HostConcurrency = f.hostConc
+	}
+	if set["jitter"] {
+		opts.Jitter = f.jitter
+	}
+	if set["retries"] {
+		opts.Retries = f.retries
+	}
+	if set["resolve-dns"] {
+		opts.ResolveDNS = f.resolveDNS
+	}
+	if set["banners"] {
+		opts.GrabBanners = f.banners
+	}
+	if set["verify-subdomains"] {
+		opts.VerifySubdomains = f.verifySubdomains
+	}
+	if set["cookie"] {
+		opts.Cookie = f.cookie
+	}
+	if set["bearer"] {
+		opts.BearerToken = f.bearer
+	}
+	if set["vhost"] {
+		opts.HostHeader = f.vhost
+	}
+	if set["proxy"] {
+		opts.ProxyURL = f.proxy
+	}
+	if set["resume"] {
+		opts.CheckpointPath = f.resume
+	}
+	if set["pcap"] {
+		opts.PCAPPath = f.pcapPath
+	}
+	if set["log"] {
+		opts.LogPath = f.logPath
+	}
+	if len(f.headers) > 0 {
+		opts.Headers = parseHeaders(f.headers)
+	}
+	if set["basic"] && f.basicAuth != "" {
 		opts.BasicUser, opts.BasicPass = splitColon(f.basicAuth)
+	}
+
+	// Options read later in run() from f: fold config in when the flag is unset.
+	if cfg != nil {
+		if !set["fail-on"] && cfg.FailOn != "" {
+			f.failOn = cfg.FailOn
+		}
+		if !set["no-dns-enum"] && cfg.NoDNSEnum != nil {
+			f.noDNSEnum = *cfg.NoDNSEnum
+		}
+		if !set["web-auth"] && cfg.Web.Auth != "" {
+			f.webAuth = cfg.Web.Auth
+		}
+		if !set["targets-file"] && !set["iL"] && cfg.TargetsFile != "" {
+			f.targetsFile = cfg.TargetsFile
+		}
+		// Feeds and catalogues from config run before any from the CLI.
+		f.vulnFeeds = append(stringSlice(cfg.VulnFeeds), f.vulnFeeds...)
+		f.faviconCatalogs = append(stringSlice(cfg.FaviconCatalogs), f.faviconCatalogs...)
 	}
 
 	if outFmt == "" {
