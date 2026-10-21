@@ -287,9 +287,79 @@ func detectServer(root *probe.Response, all []*probe.Response) ServerInfo {
 		}
 	}
 
+	// nginx-specific enrichment (version recovery, stub_status, X-Accel, Lua).
+	enrichNginx(&s, all, addMod)
+
 	sort.Strings(s.Modules)
 	sortFindings(s.Evidence)
 	return s
+}
+
+// enrichNginx adds nginx-specific metadata beyond the Server header: the
+// OpenResty Lua runtime, the stub_status module (with its live connection
+// counters), X-Accel internal-redirect/offload support, and a version recovered
+// from a status or error page when the Server header hid it (server_tokens off).
+func enrichNginx(s *ServerInfo, all []*probe.Response, addMod func(string)) {
+	nginxFamily := func() bool {
+		switch s.Product {
+		case "nginx", "OpenResty", "Tengine":
+			return true
+		default:
+			return false
+		}
+	}
+
+	for _, r := range all {
+		for _, h := range nginxAccelHeaders {
+			if r.HeaderGet(h) != "" {
+				addMod("ngx X-Accel offload")
+				if nginxFamily() {
+					s.Evidence = append(s.Evidence, Finding{
+						Signal: "server.nginx-xaccel", Detail: "nginx X-Accel internal redirect / offload header",
+						Data: h, Confidence: 55, Tier: Tier(55),
+					})
+				}
+				break
+			}
+		}
+
+		body := r.BodyString()
+		if body == "" {
+			continue
+		}
+		if reNginxStatus.MatchString(body) {
+			if s.Product == "" {
+				s.Product = "nginx"
+			}
+			addMod("ngx_http_stub_status_module")
+			s.Evidence = append(s.Evidence, Finding{
+				Signal: "server.nginx-stub-status",
+				Detail: "nginx stub_status page exposed (live connection counters)",
+				Data:   trim(strings.Join(strings.Fields(body), " ")), Confidence: 70, Tier: Tier(70),
+			})
+		}
+		// Recover a hidden version from a status/error page.
+		if s.Version == "" && (nginxFamily() || s.Product == "") {
+			if m := reNginxVer.FindStringSubmatch(body); m != nil {
+				if s.Product == "" {
+					s.Product = "nginx"
+				}
+				s.Version = m[1]
+				s.Evidence = append(s.Evidence, Finding{
+					Signal: "server.nginx-version-page", Detail: "nginx version recovered from a page body",
+					Data: trim(m[0]), Confidence: 60, Tier: Tier(60),
+				})
+			}
+		}
+	}
+
+	// OpenResty bundles the LuaJIT runtime; Tengine is Taobao's nginx fork.
+	switch s.Product {
+	case "OpenResty":
+		addMod("LuaJIT (OpenResty)")
+	case "Tengine":
+		addMod("Tengine (nginx fork)")
+	}
 }
 
 func proxyNote(p ProxyInfo) string {

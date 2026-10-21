@@ -57,6 +57,38 @@ func TestServerModulesAndOS(t *testing.T) {
 	}
 }
 
+func TestNginxStubStatusAndVersionRecovery(t *testing.T) {
+	// server_tokens off: bare "nginx" header, version recovered from a page.
+	root := mkResp(200, map[string]string{"Server": "nginx"}, nil, "")
+	status := mkResp(200, nil, nil, "Active connections: 43 \nserver accepts handled requests\n 12 12 60\nReading: 0 Writing: 1 Waiting: 42\n")
+	errPage := mkResp(404, map[string]string{"Content-Type": "text/html"}, nil, "<center>nginx/1.27.1</center>")
+	res := Analyze(root, []*probe.Response{status, errPage})
+	s := res.Server
+	if s.Product != "nginx" {
+		t.Fatalf("product: %+v", s)
+	}
+	if s.Version != "1.27.1" {
+		t.Fatalf("version recovered from page = %q, want 1.27.1", s.Version)
+	}
+	if !has(s.Modules, "ngx_http_stub_status_module") {
+		t.Fatalf("stub_status module not detected: %v", s.Modules)
+	}
+}
+
+func TestNginxOpenRestyAndXAccel(t *testing.T) {
+	root := mkResp(200, map[string]string{"Server": "openresty/1.25.3.1", "X-Accel-Buffering": "no"}, nil, "")
+	s := Analyze(root, nil).Server
+	if s.Product != "OpenResty" || s.Version != "1.25.3.1" {
+		t.Fatalf("product/version: %+v", s)
+	}
+	if !has(s.Modules, "LuaJIT (OpenResty)") {
+		t.Fatalf("LuaJIT runtime not noted: %v", s.Modules)
+	}
+	if !has(s.Modules, "ngx X-Accel offload") {
+		t.Fatalf("X-Accel offload not detected: %v", s.Modules)
+	}
+}
+
 func TestCDNDetection(t *testing.T) {
 	res := Analyze(mkResp(200, map[string]string{"CF-RAY": "abc123", "Server": "cloudflare"}, nil, ""), nil)
 	if !res.Proxy.Present || !res.Proxy.Concealed {

@@ -27,6 +27,12 @@ type Input struct {
 	// PathInfo is the response to /index.php/<token> (deep mode): a 200 implies
 	// PHP PATH_INFO handling (cgi/fpm), another positive PHP signal.
 	PathInfo *probe.Response
+	// Control is the response to a guaranteed-nonexistent URL (deep mode). It is
+	// the soft-404 baseline: a server that returns a normal page for a path that
+	// cannot exist is a catch-all, so a 200 at a probed path is not, on its own,
+	// evidence of anything. URL-only and behavioural signals are suppressed when
+	// the probed response is indistinguishable from this baseline.
+	Control *probe.Response
 	// Catalog supplies vulnerability/EOL data. When nil, the built-in default
 	// catalogue is used.
 	Catalog *Catalog
@@ -114,6 +120,11 @@ func Analyze(in Input) *Detection {
 		}
 	}
 
+	// Soft-404 / catch-all baseline: a server that answers a guaranteed-missing
+	// URL with a normal page makes "200 at a probed path" meaningless, so such
+	// URL-only/behavioural signals are gated against it below.
+	ctrl := controlSignature(in.Control)
+
 	// --- Primary response ---------------------------------------------------
 	analyzeResponse(in.Root, in.TargetURL, addEv, addFw, addExt, addMod, setVersion, setVariant)
 
@@ -161,12 +172,18 @@ func Analyze(in Input) *Detection {
 				}
 				addEv(ev)
 			}
-			detectStatusDashboards(url, body, addEvStatus, addExt, addFw, addMod)
+			// When this probe is indistinguishable from the missing-URL baseline
+			// the server is a catch-all, so URL-only signals here carry no weight.
+			catchAll := ctrl.matches(resp)
+			detectStatusDashboards(url, body, addEvStatus, addExt, addFw, addMod, catchAll)
 		}
 	}
 
 	// --- PATH_INFO behavioural probe ----------------------------------------
-	if p := in.PathInfo; p != nil && p.Err == "" && p.Status == 200 {
+	// Only counts when index.php/<path> behaves differently from a nonexistent
+	// path: on a catch-all server every URL returns 200, so the 200 here is not
+	// evidence of PHP PATH_INFO handling.
+	if p := in.PathInfo; p != nil && p.Err == "" && p.Status == 200 && !ctrl.matches(p) {
 		addEv(Evidence{
 			Signal: "behavior.path-info", Source: p.FinalURL, Weight: 35,
 			Detail: "index.php/<path> is served (PHP PATH_INFO handling)", Status: p.Status,
@@ -513,9 +530,65 @@ func inferSAPI(root *probe.Response, pathInfo bool) string {
 	}
 }
 
+// ctrlSig is a fingerprint of the soft-404 / catch-all baseline response (the
+// reply to a guaranteed-nonexistent URL), used to tell a genuinely distinct
+// page apart from a server that returns the same thing for every path.
+type ctrlSig struct {
+	present bool
+	status  int
+	bodyLen int
+	ctype   string
+}
+
+func controlSignature(r *probe.Response) ctrlSig {
+	if r == nil || r.Err != "" || r.Status == 0 {
+		return ctrlSig{}
+	}
+	return ctrlSig{
+		present: true,
+		status:  r.Status,
+		bodyLen: len(r.Body),
+		ctype:   mediaType(r.HeaderGet("Content-Type")),
+	}
+}
+
+// matches reports whether a probe response is indistinguishable from the
+// baseline: same status, same media type, and a body within 15% of the
+// baseline's size. When no baseline was captured it always returns false, so
+// detection falls back to its prior (ungated) behaviour.
+func (c ctrlSig) matches(r *probe.Response) bool {
+	if !c.present || r == nil || r.Err != "" || r.Status == 0 {
+		return false
+	}
+	if r.Status != c.status {
+		return false
+	}
+	if ct := mediaType(r.HeaderGet("Content-Type")); c.ctype != "" && ct != "" && ct != c.ctype {
+		return false
+	}
+	a, b := len(r.Body), c.bodyLen
+	hi, lo := a, b
+	if hi < lo {
+		hi, lo = lo, hi
+	}
+	if hi == 0 {
+		return true // both empty with the same status
+	}
+	return float64(hi-lo)/float64(hi) <= 0.15
+}
+
+// mediaType returns the lowercased type/subtype of a Content-Type header,
+// dropping any parameters (e.g. "; charset=utf-8").
+func mediaType(ct string) string {
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = ct[:i]
+	}
+	return strings.ToLower(strings.TrimSpace(ct))
+}
+
 // detectStatusDashboards recognises exposed status/management pages that reveal
 // PHP extensions (OPcache, APCu) or PHP tools (Adminer, phpMyAdmin, Composer).
-func detectStatusDashboards(url, body string, addEv func(Evidence), addExt, addFw, addMod func(string)) {
+func detectStatusDashboards(url, body string, addEv func(Evidence), addExt, addFw, addMod func(string), catchAll bool) {
 	lu := strings.ToLower(url)
 
 	if contains(body, "opcache_get_status") ||
@@ -532,7 +605,9 @@ func detectStatusDashboards(url, body string, addEv func(Evidence), addExt, addF
 		addFw("Adminer")
 		addEv(Evidence{Signal: "diag.adminer", Source: url, Weight: 45, Detail: "Adminer database tool exposed"})
 	}
-	if strings.Contains(lu, "phpmyadmin") || (containsFold(body, "phpmyadmin") && containsFold(body, "pma_")) {
+	// URL-only match is suppressed on a catch-all server; body markers (pma_)
+	// are independent content evidence and always count.
+	if (strings.Contains(lu, "phpmyadmin") && !catchAll) || (containsFold(body, "phpmyadmin") && containsFold(body, "pma_")) {
 		addFw("phpMyAdmin")
 		addEv(Evidence{Signal: "diag.phpmyadmin", Source: url, Weight: 45, Detail: "phpMyAdmin exposed"})
 	}

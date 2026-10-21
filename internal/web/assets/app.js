@@ -390,6 +390,32 @@ function isPHPResult(svc) {
   return !!(svc && svc.php && svc.php.verdict && svc.php.verdict !== "none");
 }
 
+// sevRankJS ranks a severity string for client-side sorting (higher = worse).
+function sevRankJS(sev) {
+  switch ((sev || "").toLowerCase()) {
+    case "critical": return 4;
+    case "high": return 3;
+    case "medium": case "moderate": return 2;
+    case "low": return 1;
+    default: return 0;
+  }
+}
+
+function vulnCount(svc) {
+  return svc && svc.php && svc.php.vulnerabilities ? svc.php.vulnerabilities.length : 0;
+}
+
+// svcMaxSevRank is the worst vulnerability-lead severity on a service.
+function svcMaxSevRank(svc) {
+  if (!svc || !svc.php || !svc.php.vulnerabilities) return 0;
+  let max = 0;
+  for (const v of svc.php.vulnerabilities) {
+    const r = sevRankJS(v.severity);
+    if (r > max) max = r;
+  }
+  return max;
+}
+
 function dnsFor(svc) {
   return (scanRender && scanRender.hostDNS[svc.host]) || null;
 }
@@ -514,10 +540,20 @@ function scheduleRender() {
 // confidence first) on top.
 function renderBucket(container, list, mode) {
   container.replaceChildren();
-  if (mode === "php") {
+  if (mode === "php" || mode === "vuln") {
     const ordered = list
       .map((s, i) => ({ s, i }))
       .sort((a, b) => {
+        if (mode === "vuln") {
+          // Services with the most critical vulnerability leads on top.
+          const va = svcMaxSevRank(a.s);
+          const vb = svcMaxSevRank(b.s);
+          if (va !== vb) return vb - va;
+          const na = vulnCount(a.s);
+          const nb = vulnCount(b.s);
+          if (na !== nb) return nb - na;
+          return a.i - b.i;
+        }
         const pa = isPHPResult(a.s) ? 0 : 1;
         const pb = isPHPResult(b.s) ? 0 : 1;
         if (pa !== pb) return pa - pb;
@@ -1196,6 +1232,9 @@ function renderStats(ov) {
   // PHP presence split across ports (e.g. http/80 vs https/443).
   body.appendChild(barChart("PHP services by port", mapToRows(s.php_by_port), (r) => portColor(r.key)));
 
+  // Web-server distribution (apache vs nginx vs …).
+  body.appendChild(barChart("Web servers", s.top_servers, (r) => serverColor(r.key)));
+
   // Bar charts: toplists.
   body.appendChild(barChart("Top vulnerabilities", s.top_vulns, (r) => sevColor(r.severity)));
   body.appendChild(barChart("Top applications", s.top_apps, () => CHART_ACCENT));
@@ -1232,6 +1271,17 @@ function portColor(key) {
   if (k.startsWith("https")) return CHART_ACCENT2;
   if (k.startsWith("http")) return CHART_ACCENT;
   return "#94a3b8";
+}
+
+// serverColor gives each web-server family a stable, recognisable colour.
+function serverColor(key) {
+  const k = (key || "").toLowerCase();
+  if (k.includes("nginx") || k.includes("openresty") || k.includes("tengine")) return "#4fd1c5";
+  if (k.includes("apache")) return "#ff9f45";
+  if (k.includes("iis")) return "#7c9cff";
+  if (k.includes("litespeed")) return "#c58cff";
+  if (k.includes("caddy")) return "#64d2a0";
+  return CHART_ACCENT;
 }
 
 // mapToRows turns a {key:count} object into bar-chart rows sorted by count.

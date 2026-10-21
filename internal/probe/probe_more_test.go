@@ -112,6 +112,68 @@ func TestBasicAuth(t *testing.T) {
 	}
 }
 
+func TestCredentialsNotSentCrossHost(t *testing.T) {
+	// Target B lives on a different loopback host than A; a redirect A→B must
+	// not forward the cookie or Authorization configured for A.
+	ln, err := net.Listen("tcp", "127.0.0.2:0")
+	if err != nil {
+		t.Skipf("127.0.0.2 not available in this environment: %v", err)
+	}
+	var gotCookie, gotAuth, gotBasic string
+	srvB := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie = r.Header.Get("Cookie")
+		gotAuth = r.Header.Get("Authorization")
+		if u, _, ok := r.BasicAuth(); ok {
+			gotBasic = u
+		}
+		io.WriteString(w, "B")
+	})}
+	go func() { _ = srvB.Serve(ln) }()
+	defer srvB.Close()
+	bURL := "http://" + ln.Addr().String() + "/landing"
+
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, bURL, http.StatusFound)
+	}))
+	defer srvA.Close()
+
+	f := NewFetcher(FetcherConfig{
+		Timeout: 3 * time.Second, FollowRedirects: true,
+		Cookie: "sid=secret", BearerToken: "tok", BasicUser: "user", BasicPass: "pass",
+	})
+	r := f.Get(context.Background(), srvA.URL+"/")
+	if r.Err != "" {
+		t.Fatalf("fetch error: %s", r.Err)
+	}
+	if gotCookie != "" {
+		t.Errorf("cookie leaked to another host: %q", gotCookie)
+	}
+	if gotAuth != "" || gotBasic != "" {
+		t.Errorf("Authorization leaked to another host: auth=%q basic=%q", gotAuth, gotBasic)
+	}
+}
+
+func TestCredentialsFollowSameHostRedirect(t *testing.T) {
+	var gotCookie string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/b" {
+			gotCookie = r.Header.Get("Cookie")
+			io.WriteString(w, "B")
+			return
+		}
+		http.Redirect(w, r, "/b", http.StatusFound)
+	}))
+	defer ts.Close()
+	f := NewFetcher(FetcherConfig{Timeout: 3 * time.Second, FollowRedirects: true, Cookie: "sid=keepme"})
+	r := f.Get(context.Background(), ts.URL+"/a")
+	if r.Err != "" {
+		t.Fatalf("fetch error: %s", r.Err)
+	}
+	if gotCookie != "sid=keepme" {
+		t.Errorf("same-host redirect should keep the cookie, got %q", gotCookie)
+	}
+}
+
 func TestProxyBadScheme(t *testing.T) {
 	f := NewFetcher(FetcherConfig{Timeout: time.Second, ProxyURL: "gopher://nope"})
 	r := f.Get(context.Background(), "http://127.0.0.1:1/")

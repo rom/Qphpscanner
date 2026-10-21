@@ -146,9 +146,16 @@ var proxyBodySigs = []bodySig{
 var (
 	reServerProduct = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_.\-]*?)(?:/([0-9][A-Za-z0-9.\-]*))?(?:\s|$)`)
 	reNginxBody     = regexp.MustCompile(`(?i)<(?:center|hr)>\s*nginx(?:/([0-9.]+))?`)
-	reApacheBody    = regexp.MustCompile(`(?i)Apache/([0-9][0-9.]+)`)
-	reIISBody       = regexp.MustCompile(`(?i)Microsoft-IIS/([0-9][0-9.]+)`)
-	reLiteSpeedBody = regexp.MustCompile(`(?i)LiteSpeed`)
+	// reNginxStatus matches the ngx_http_stub_status_module page body.
+	reNginxStatus = regexp.MustCompile(`(?i)Active connections:\s*\d+\s+server\s+accepts\s+handled\s+requests`)
+	// reNginxVer recovers an nginx version from any page body (status/error),
+	// used when the Server header hides it (server_tokens off).
+	reNginxVer = regexp.MustCompile(`(?i)\b(?:nginx|openresty|tengine)/([0-9]+\.[0-9]+(?:\.[0-9]+)?(?:\.[0-9]+)?)`)
+	// nginxAccelHeaders are nginx-specific internal-redirect / offload headers.
+	nginxAccelHeaders = []string{"X-Accel-Buffering", "X-Accel-Redirect", "X-Accel-Limit-Rate", "X-Accel-Expires", "X-Accel-Charset"}
+	reApacheBody      = regexp.MustCompile(`(?i)Apache/([0-9][0-9.]+)`)
+	reIISBody         = regexp.MustCompile(`(?i)Microsoft-IIS/([0-9][0-9.]+)`)
+	reLiteSpeedBody   = regexp.MustCompile(`(?i)LiteSpeed`)
 )
 
 // knownServers maps a Server-header product token (lowercased) to a display

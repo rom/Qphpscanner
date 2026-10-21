@@ -586,9 +586,11 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 			u := base + ensureLeadingSlash(p)
 			in.Extra[u] = fetcher.Get(ctx, u)
 		}
-		// The 404 page can leak a PHP version via an Apache signature.
+		// The 404 page can leak a PHP version via an Apache signature, and also
+		// serves as the soft-404 baseline for catch-all detection.
 		if notFound != nil {
 			in.Extra[base+"/qphpscanner_probe_404"] = notFound
+			in.Control = notFound
 		}
 		in.EasterCredits = fetcher.Get(ctx, base+"/"+php.EasterEggCredits)
 		in.EasterLogo = fetcher.Get(ctx, base+"/"+php.EasterEggLogo)

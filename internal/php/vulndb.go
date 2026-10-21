@@ -394,6 +394,36 @@ var builtinPHP = []FeedEntry{
 		Reference:   nvd + "CVE-2011-4885",
 		Affected:    []RangeSpec{lo("5.3.9")},
 	},
+
+	// ---- additional curated entries ----
+	{
+		ID: "CVE-2025-1217", Severity: "medium",
+		Title:       "HTTP request stream wrapper header-folding parse error",
+		Description: "The http:// stream wrapper mishandles folded (multi-line) response headers, which can desynchronise header parsing.",
+		Reference:   nvd + "CVE-2025-1217", Note: "fixed in the March 2025 release line",
+		Affected: []RangeSpec{br("8.1", "8.1.32"), br("8.2", "8.2.28"), br("8.3", "8.3.19"), br("8.4", "8.4.5")},
+	},
+	{
+		ID: "CVE-2025-1219", Severity: "medium",
+		Title:       "Wrong libxml parser selected from a mis-cased Content-Type",
+		Description: "DOMDocument/SimpleXML may pick the wrong parser when the Content-Type header casing is unexpected, leading to incorrect or unsafe parsing.",
+		Reference:   nvd + "CVE-2025-1219", Note: "fixed in the March 2025 release line",
+		Affected: []RangeSpec{br("8.1", "8.1.32"), br("8.2", "8.2.28"), br("8.3", "8.3.19"), br("8.4", "8.4.5")},
+	},
+	{
+		ID: "CVE-2024-8929", Severity: "medium",
+		Title:       "mysqlnd heap buffer over-read (leak to a malicious MySQL server)",
+		Description: "A hostile or compromised MySQL server can trigger a heap over-read in mysqlnd and read adjacent client memory.",
+		Reference:   nvd + "CVE-2024-8929", Note: "applications using mysqlnd against an untrusted DB server",
+		Affected: []RangeSpec{br("8.1", "8.1.31"), br("8.2", "8.2.26"), br("8.3", "8.3.14")},
+	},
+	{
+		ID: "CVE-2022-37454", Severity: "high",
+		Title:       "SHA-3 (Keccak/XKCP) buffer overflow in the hash extension",
+		Description: "An integer overflow and resulting buffer overflow in the bundled SHA-3 (Keccak) reference implementation can corrupt memory when hashing attacker-sized input.",
+		Reference:   nvd + "CVE-2022-37454",
+		Affected:    []RangeSpec{br("8.0", "8.0.24"), br("8.1", "8.1.11")},
+	},
 }
 
 // builtinCMS holds a small set of famous, accurately-bounded CMS core issues,
@@ -441,6 +471,20 @@ var builtinCMS = map[string][]FeedEntry{
 			Description: "A stored cross-site scripting issue in the core avatar block in affected versions.",
 			Reference:   nvd + "CVE-2024-4439",
 			Affected:    []RangeSpec{lo("6.5.2")},
+		},
+		{
+			ID: "CVE-2022-21664", Severity: "high",
+			Title:       "WordPress: SQL injection via WP_Meta_Query",
+			Description: "A SQL injection reachable through WP_Meta_Query in affected core versions.",
+			Reference:   nvd + "CVE-2022-21664",
+			Affected:    []RangeSpec{lo("5.8.3")},
+		},
+		{
+			ID: "CVE-2022-21663", Severity: "high",
+			Title:       "WordPress: PHP object injection (authenticated, multisite)",
+			Description: "An authenticated user on a multisite install could trigger PHP object injection in affected core versions.",
+			Reference:   nvd + "CVE-2022-21663",
+			Affected:    []RangeSpec{lo("5.8.3")},
 		},
 	},
 	"drupal": {
@@ -496,6 +540,13 @@ var builtinCMS = map[string][]FeedEntry{
 			Description: "A crafted User-Agent/X-Forwarded-For enables object injection and remote code execution.",
 			Reference:   nvd + "CVE-2015-8562",
 			Affected:    []RangeSpec{rng("1.5.0", "3.4.6")},
+		},
+		{
+			ID: "CVE-2017-8917", Severity: "critical",
+			Title:       "Joomla: SQL injection in core (3.7.0)",
+			Description: "A SQL injection in the com_fields component, introduced in 3.7.0, allows unauthenticated database access.",
+			Reference:   nvd + "CVE-2017-8917",
+			Affected:    []RangeSpec{rng("3.7.0", "3.7.1")},
 		},
 		{
 			ID: "CVE-2024-21726", Severity: "medium",

@@ -56,6 +56,9 @@ type overviewStats struct {
 	TopVulns        []topEntry `json:"top_vulns"`
 	TopApps         []topEntry `json:"top_apps"`
 	TopNetworks     []topEntry `json:"top_networks"`
+	// TopServers ranks identified web servers (Apache, nginx, …) across all
+	// scanned services so their distribution is visible.
+	TopServers []topEntry `json:"top_servers"`
 	// Breakdowns for charts: vulnerability leads by severity, and PHP-analysed
 	// services by verdict.
 	SeverityBreakdown map[string]int `json:"severity_breakdown"`
@@ -86,6 +89,7 @@ func (s *Server) computeOverview() overview {
 	vulnSev := map[string]string{}
 	appCount := map[string]int{}
 	netCount := map[string]int{}
+	serverCount := map[string]int{}
 
 	var stats overviewStats
 	stats.SeverityBreakdown = map[string]int{}
@@ -107,6 +111,9 @@ func (s *Server) computeOverview() overview {
 				stats.Services++
 				net := networkKey(svc.Host)
 				netCount[net]++
+				if svc.Server != nil && svc.Server.Product != "" {
+					serverCount[svc.Server.Product]++
+				}
 				ref := itemRef{ScanID: h.ID, Host: svc.Host, URL: svc.URL, At: h.At.Format("2006-01-02 15:04")}
 				p := svc.PHP
 				if p == nil {
@@ -152,6 +159,7 @@ func (s *Server) computeOverview() overview {
 	stats.TopVulns = topFromCountsSev(vuln.counts(), vulnSev, 10)
 	stats.TopApps = topFromCounts(appCount, 10)
 	stats.TopNetworks = topFromCounts(netCount, 10)
+	stats.TopServers = topFromCounts(serverCount, 10)
 
 	return overview{
 		Stats:      stats,
