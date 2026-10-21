@@ -157,6 +157,28 @@ func Analyze(in Input) *Detection {
 				setVersion(m[1], "phpinfo()", 3)
 			}
 			parsePHPInfoModules(body, addExt, setVariant)
+			// Structured, observed facts (SAPI, thread-safety, config paths,
+			// security-relevant directives, extension versions).
+			if facts := parsePHPInfo(body); facts != nil {
+				d.PHPInfo = facts
+				for ext := range facts.ExtensionVersions {
+					addExt(ext)
+				}
+				if facts.SAPI != "" {
+					addEv(Evidence{
+						Signal: "phpinfo.sapi", Source: url, Weight: 0,
+						Detail: "Server API observed in phpinfo(): " + facts.SAPI, Status: resp.Status,
+					})
+				}
+				for _, dir := range facts.Directives {
+					if dir.Risk {
+						addEv(Evidence{
+							Signal: "phpinfo.directive." + strings.ToLower(dir.Name), Source: url, Weight: 0,
+							Detail: "phpinfo(): " + dir.Name + " = " + dir.Local + " (security-relevant)", Status: resp.Status,
+						})
+					}
+				}
+			}
 		}
 		if resp.Status == 200 && isComposerManifest(url, body) {
 			addEv(Evidence{

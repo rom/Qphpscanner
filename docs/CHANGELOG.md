@@ -8,6 +8,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Structured `phpinfo()` metadata:** when a phpinfo() page is exposed, the
+  observed Server API (e.g. "FPM/FastCGI"), thread-safety, architecture, build
+  date, loaded/additional `.ini` paths, security-relevant directive values
+  (local/master) and notable extension versions (e.g. Xdebug) are extracted and
+  shown — kept separate from the header-inferred guesses, with risky directives
+  surfaced as observations and credential-shaped values redacted.
 - Web GUI shows the build version in the page footer (`/api/version`).
 - Statistics: a **PHP services by port** breakdown (e.g. http/80 vs https/443).
 - Statistics: a **web-server distribution** chart (Apache vs nginx vs …).

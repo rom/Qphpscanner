@@ -107,6 +107,9 @@ type Detection struct {
 
 	PHPInfoExposed bool   `json:"phpinfo_exposed,omitempty"`
 	PHPInfoURL     string `json:"phpinfo_url,omitempty"`
+	// PHPInfo holds structured values observed in an exposed phpinfo() page
+	// (observed, not inferred from headers). Nil when no phpinfo() was found.
+	PHPInfo *PHPInfoFacts `json:"phpinfo,omitempty" xml:"phpinfo,omitempty"`
 
 	Evidence        []Evidence      `json:"evidence,omitempty"`
 	Vulnerabilities []Vulnerability `json:"vulnerabilities,omitempty"`

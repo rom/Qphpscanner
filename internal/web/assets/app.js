@@ -853,6 +853,19 @@ function renderService(svc, target) {
       kv.appendChild(el("dt", null, "phpinfo()"));
       kv.appendChild(el("dd", "warn", "exposed at " + php.phpinfo_url));
     }
+    // Structured facts observed directly in an exposed phpinfo() page.
+    const pi = php.phpinfo;
+    if (pi) {
+      if (pi.sapi) add("Server API (observed)", pi.sapi);
+      if (pi.thread_safety) add("Thread safety", pi.thread_safety);
+      if (pi.architecture) add("Architecture", pi.architecture);
+      if (pi.build_date) add("PHP build date", pi.build_date);
+      if (pi.loaded_config_file) add("php.ini", pi.loaded_config_file);
+      if (pi.additional_ini_dir) add("Additional .ini dir", pi.additional_ini_dir);
+      if (pi.extension_versions) {
+        for (const ext of Object.keys(pi.extension_versions)) add(ext + " version", pi.extension_versions[ext]);
+      }
+    }
   }
   card.appendChild(kv);
 
@@ -860,6 +873,9 @@ function renderService(svc, target) {
     if (php.frameworks && php.frameworks.length) card.appendChild(chips("Frameworks", php.frameworks));
     if (php.addons && php.addons.length) card.appendChild(chips("Addons / tools", php.addons));
     if (php.extensions && php.extensions.length) card.appendChild(chips("PHP extensions", php.extensions));
+    if (php.phpinfo && php.phpinfo.observations && php.phpinfo.observations.length) {
+      card.appendChild(chips("phpinfo() observations", php.phpinfo.observations));
+    }
     if (php.vulnerabilities && php.vulnerabilities.length) card.appendChild(renderVulns(php.vulnerabilities));
     if (php.evidence && php.evidence.length) card.appendChild(renderEvidence(php.evidence));
   }
