@@ -9,7 +9,7 @@ var (
 	Name = "qphpscanner"
 
 	// Version is the semantic version of the build.
-	Version = "0.1.0"
+	Version = "1.0.0"
 
 	// Commit is the VCS revision the binary was built from (optional).
 	Commit = "dev"
