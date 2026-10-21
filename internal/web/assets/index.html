@@ -113,6 +113,15 @@
           <p class="hint">Independent of the Host header (set via the config/CLI <code>--vhost</code>). A name that mismatches the certificate fails verification unless “Ignore TLS errors” is on.</p>
         </details>
 
+        <details class="advanced">
+          <summary>Composer files (dependency inventory)</summary>
+          <label for="composer-file" class="file-btn" title="Supply composer.json / composer.lock / installed.json to inventory dependencies">Load Composer file(s)…</label>
+          <input type="file" id="composer-file" accept=".json,.lock,application/json" hidden multiple>
+          <button type="button" id="composer-clear" class="link-btn hidden" title="Clear loaded Composer files">clear</button>
+          <span id="composer-file-name" class="hint"></span>
+          <p class="hint">Read client-side and sent with the scan. Builds a dependency inventory (declared / locked / installed) and correlates package advisories — for projects whose Composer files are not web-exposed.</p>
+        </details>
+
         <div class="btn-row">
           <button type="submit" id="scan-btn" class="primary" title="Start the scan">Scan</button>
           <button type="button" id="cancel-btn" class="secondary hidden" title="Stop the scan — results collected so far are kept">Cancel</button>

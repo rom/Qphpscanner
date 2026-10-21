@@ -37,6 +37,10 @@ type Input struct {
 	// Catalog supplies vulnerability/EOL data. When nil, the built-in default
 	// catalogue is used.
 	Catalog *Catalog
+	// ComposerFiles are operator-supplied Composer file contents (composer.json
+	// / composer.lock / installed.json, sniffed by content) for projects whose
+	// files are not web-exposed. They augment or override any fetched ones.
+	ComposerFiles [][]byte
 }
 
 const maxDataLen = 200
@@ -150,6 +154,9 @@ func Analyze(in Input) *Detection {
 	}
 
 	// --- Deep probes --------------------------------------------------------
+	// Composer file bodies captured during the loop, assembled into an inventory
+	// after it (keyed by kind from the probe URL).
+	var composerJSON, composerLock, composerInstalled string
 	for url, resp := range in.Extra {
 		if resp == nil || resp.Err != "" {
 			continue
@@ -196,6 +203,16 @@ func Analyze(in Input) *Detection {
 				Signal: "diag.composer", Source: url, Weight: 45,
 				Detail: "Composer manifest/lock is publicly readable (PHP project)", Status: resp.Status,
 			})
+		}
+		if resp.Status == 200 {
+			switch lu := strings.ToLower(url); {
+			case strings.Contains(lu, "composer.lock"):
+				composerLock = body
+			case strings.Contains(lu, "installed.json"):
+				composerInstalled = body
+			case strings.Contains(lu, "composer.json"):
+				composerJSON = body
+			}
 		}
 		if resp.Status == 200 {
 			st := resp.Status
@@ -289,6 +306,29 @@ func Analyze(in Input) *Detection {
 			d.Vulnerabilities = append(d.Vulnerabilities, cat.CorrelateCMS(fw, ver, facts)...)
 		}
 		sortVulns(d.Vulnerabilities)
+	}
+
+	// --- Composer dependency inventory --------------------------------------
+	// Operator-supplied files augment or override the web-fetched ones.
+	for _, raw := range in.ComposerFiles {
+		switch classifyComposer(string(raw)) {
+		case "json":
+			composerJSON = string(raw)
+		case "lock":
+			composerLock = string(raw)
+		case "installed":
+			composerInstalled = string(raw)
+		}
+	}
+	if inv := buildComposerInventory(composerJSON, composerLock, composerInstalled); inv != nil {
+		if in.Deep {
+			cat := in.Catalog
+			if cat == nil {
+				cat = DefaultCatalog()
+			}
+			correlateComposer(cat, inv, observedFacts(d))
+		}
+		d.Composer = inv
 	}
 
 	return d

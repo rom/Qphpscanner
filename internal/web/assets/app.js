@@ -78,6 +78,36 @@ if (targetsClearEl) {
   });
 }
 
+// Composer files loaded client-side and sent with the scan for inventorying.
+let composerFileContents = [];
+const composerFileEl = $("composer-file");
+if (composerFileEl) {
+  const nameEl = $("composer-file-name");
+  const clearEl = $("composer-clear");
+  composerFileEl.addEventListener("change", async () => {
+    const files = Array.from(composerFileEl.files || []);
+    const names = [];
+    for (const file of files) {
+      try {
+        composerFileContents.push(await file.text());
+        names.push(file.name);
+      } catch (_) {
+        setStatus("Could not read " + file.name, true);
+      }
+    }
+    if (names.length) {
+      nameEl.textContent = " " + composerFileContents.length + " file(s): " + names.join(", ");
+      clearEl.classList.remove("hidden");
+    }
+    composerFileEl.value = "";
+  });
+  clearEl.addEventListener("click", () => {
+    composerFileContents = [];
+    nameEl.textContent = "";
+    clearEl.classList.add("hidden");
+  });
+}
+
 // ---------- tabs ----------
 let overviewCache = null;
 for (const tab of document.querySelectorAll(".tab")) {
@@ -183,6 +213,7 @@ async function runScan() {
     block: splitList($("block").value),
     resolve: splitList($("resolve").value),
     sni: $("sni").value.trim(),
+    composer_files: composerFileContents,
   };
 
   scanBtn.disabled = true;
@@ -949,6 +980,7 @@ function renderService(svc, target) {
       card.appendChild(chips("phpinfo() observations", php.phpinfo.observations));
     }
     if (php.vulnerabilities && php.vulnerabilities.length) card.appendChild(renderVulns(php.vulnerabilities));
+    if (php.composer) card.appendChild(renderComposer(php.composer));
     if (php.evidence && php.evidence.length) card.appendChild(renderEvidence(php.evidence));
   }
 
@@ -1001,6 +1033,32 @@ function renderVulns(vulns) {
   }
   d.appendChild(ul);
   d.appendChild(el("p", "note", "Correlated from the detected version only — verify against the live service."));
+  return d;
+}
+
+function renderComposer(inv) {
+  const pkgs = inv.packages || [];
+  const d = el("details");
+  d.appendChild(el("summary", null, `Composer packages (${pkgs.length})`));
+  if (inv.php_require) {
+    d.appendChild(el("p", "note", "requires PHP " + inv.php_require + " (a Composer constraint — not the running version)"));
+  }
+  const ul = el("ul", "item-list");
+  for (const p of pkgs) {
+    const li = el("li");
+    li.appendChild(document.createTextNode(p.name + " " + p.version));
+    li.appendChild(el("span", "when", p.class));
+    if (p.vulnerabilities && p.vulnerabilities.length) {
+      for (const v of p.vulnerabilities) {
+        const note = el("div", "note prereq-observed", v.id + " [" + (v.severity || "").toUpperCase() + "] — " + v.title +
+          (v.applicability === "contradicted" ? " (likely N/A here)" : ""));
+        li.appendChild(note);
+      }
+    }
+    ul.appendChild(li);
+  }
+  d.appendChild(ul);
+  d.appendChild(el("p", "note", "Dependency inventory from Composer metadata; advisory leads are version-correlated, not confirmed."));
   return d;
 }
 

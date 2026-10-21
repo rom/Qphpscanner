@@ -349,6 +349,27 @@ Extend or override it with `--favicon-catalog FILE|URL` (repeatable); the file
 is `{"schema":"qphpscanner-favicon-catalog/1","favicons":[{"hash":"…",
 "product":"…","framework":"…","php":true}]}`. An unknown hash is simply inert.
 
+## Composer dependency inventory
+
+In deep mode, an exposed `composer.json`, `composer.lock` or
+`vendor/composer/installed.json` is parsed into a **dependency inventory** (a
+partial SBOM). Each package is classified as *required* / *required-dev* (a
+constraint from `composer.json`), *locked* (`composer.lock`) or *installed*
+(`installed.json`), and concrete locked/installed versions are correlated
+against **package advisories** (built-in, plus a `packages:` map in
+`--vuln-feed` data — a name keyed to affected version ranges, OSV-batch
+compatible). The Composer `php` platform constraint is reported as a
+requirement, **not** as the running PHP version.
+
+For a project whose Composer files are not web-exposed, supply them directly:
+
+    qphpscanner --mode deep --composer-file composer.lock \
+                --composer-file vendor/composer/installed.json example.com
+
+`--composer-file` is repeatable (config key `composer_files`); the file kind is
+sniffed from its content. The web GUI has an equivalent uploader (read
+client-side) under **Composer files**.
+
 ## Host and service concurrency
 
 `--concurrency` caps total in-flight service probes; `--per-host-concurrency`

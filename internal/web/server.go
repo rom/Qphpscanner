@@ -200,8 +200,9 @@ type scanRequest struct {
 	HostConcurrency int      `json:"host_concurrency"`
 	Allow           []string `json:"allow"`
 	Block           []string `json:"block"`
-	Resolve         []string `json:"resolve"` // "host:port:addr" rules
-	SNI             string   `json:"sni"`     // TLS SNI override
+	Resolve         []string `json:"resolve"`        // "host:port:addr" rules
+	SNI             string   `json:"sni"`            // TLS SNI override
+	ComposerFiles   []string `json:"composer_files"` // raw composer.json/.lock/installed.json contents
 }
 
 // streamMsg is one line of the NDJSON response stream.
@@ -249,6 +250,11 @@ func (s *Server) buildOptions(req scanRequest) (scanner.Options, []string, error
 			return scanner.Options{}, nil, err
 		}
 		opts.Resolve = parsed
+	}
+	for _, body := range req.ComposerFiles {
+		if strings.TrimSpace(body) != "" {
+			opts.ComposerFiles = append(opts.ComposerFiles, []byte(body))
+		}
 	}
 	if req.Ports != "" {
 		ports, err := parsePortsField(req.Ports)

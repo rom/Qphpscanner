@@ -563,6 +563,37 @@ var builtinCMS = map[string][]FeedEntry{
 	},
 }
 
+// builtinPackages holds a small set of famous Composer-package advisories,
+// keyed by the package name (vendor/name, lowercase). Correlated against a
+// package's concrete locked/installed version — informational leads only.
+var builtinPackages = map[string][]FeedEntry{
+	"guzzlehttp/guzzle": {
+		{
+			ID: "CVE-2022-31090", Severity: "medium",
+			Title:       "Guzzle: cross-domain cookie leakage on redirect",
+			Description: "Guzzle may leak cookies to a different host when following a cross-domain redirect.",
+			Reference:   nvd + "CVE-2022-31090",
+			Affected:    []RangeSpec{rng("6.0.0", "6.5.8"), rng("7.0.0", "7.4.5")},
+		},
+		{
+			ID: "CVE-2022-31091", Severity: "medium",
+			Title:       "Guzzle: Authorization & Cookie headers leaked on cross-host redirect",
+			Description: "A change-of-host redirect could carry the Authorization and Cookie headers to the new host.",
+			Reference:   nvd + "CVE-2022-31091",
+			Affected:    []RangeSpec{rng("6.0.0", "6.5.8"), rng("7.0.0", "7.4.5")},
+		},
+	},
+	"phpmailer/phpmailer": {
+		{
+			ID: "CVE-2020-13625", Severity: "high",
+			Title:       "PHPMailer: insufficient output escaping (code injection)",
+			Description: "Insufficient escaping in the HTML-to-text handling can allow code injection in some configurations.",
+			Reference:   nvd + "CVE-2020-13625",
+			Affected:    []RangeSpec{lo("6.1.6")},
+		},
+	},
+}
+
 // builtinEOL maps a major.minor branch to its end of security support date.
 var builtinEOL = map[string]string{
 	"5.4": "2015-09-14",
