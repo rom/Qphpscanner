@@ -105,6 +105,12 @@ basic: ""
 vhost: ""
 # Route requests via an http(s):// or socks5:// proxy.
 proxy: ""
+# Pin host:port to a fixed dial address (curl --resolve style), keeping the URL
+# host for the Host header and TLS SNI — e.g. to reach an origin behind a CDN.
+resolve:
+  # - "example.com:443:203.0.113.10"
+# Override the TLS SNI server name, independent of the Host header.
+sni: ""
 
 # --- Data / resume / targets --------------------------------------------------
 # External vulnerability feeds (native qphpscanner, OSV or CSAF; file or URL).

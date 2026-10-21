@@ -103,6 +103,16 @@
           <p class="hint">One pattern per line: exact host/IP, CIDR, or *.domain / .domain suffix. Allow keeps only matches; block drops matches.</p>
         </details>
 
+        <details class="advanced">
+          <summary>Connection overrides (pin IP / Host / SNI)</summary>
+          <label for="resolve">Resolve (pin host:port → address)</label>
+          <textarea id="resolve" rows="2" title="curl --resolve style: force HOST:PORT to dial a specific address. One rule per line." placeholder="example.com:443:203.0.113.10&#10;example.com:80:203.0.113.10"></textarea>
+          <p class="hint">One rule per line, <code>host:port:address</code>. Dials the given address while keeping the URL host for Host/SNI — e.g. to reach an origin behind a CDN.</p>
+          <label for="sni">TLS SNI override</label>
+          <input id="sni" type="text" title="Override the TLS SNI server name, independent of the Host header. Leave blank to use the URL host." placeholder="example.com">
+          <p class="hint">Independent of the Host header (set via the config/CLI <code>--vhost</code>). A name that mismatches the certificate fails verification unless “Ignore TLS errors” is on.</p>
+        </details>
+
         <div class="btn-row">
           <button type="submit" id="scan-btn" class="primary" title="Start the scan">Scan</button>
           <button type="button" id="cancel-btn" class="secondary hidden" title="Stop the scan — results collected so far are kept">Cancel</button>
@@ -183,6 +193,34 @@
          <button type="button" id="cmp-refresh" class="secondary" title="Reload the list of retained scans">Refresh list</button>
        </div>
        <div id="cmp-result"></div>
+
+       <div class="origin-check">
+         <h3>Origin check (edge vs origin)</h3>
+         <p class="hint">Scan a target through its public edge/CDN, then again with the connection pinned to an operator-supplied origin address (keeping the real Host and TLS SNI), and see what the origin reveals.</p>
+         <div class="grid2">
+           <div>
+             <label for="oc-target">Target (host or URL)</label>
+             <input id="oc-target" type="text" title="The public hostname or URL (e.g. example.com)" placeholder="example.com">
+           </div>
+           <div>
+             <label for="oc-origin">Origin address (IP)</label>
+             <input id="oc-origin" type="text" title="The origin server address to dial instead of the public one" placeholder="203.0.113.10">
+           </div>
+         </div>
+         <div class="grid2">
+           <div>
+             <label for="oc-ports">Ports</label>
+             <input id="oc-ports" type="text" title="Ports to compare (blank = common web ports)" placeholder="443">
+           </div>
+           <div class="checks">
+             <label class="check" title="Do not verify TLS certificates (useful when the origin presents a different cert)"><input type="checkbox" id="oc-insecure"> Ignore TLS errors</label>
+           </div>
+         </div>
+         <div class="btn-row">
+           <button type="button" id="oc-run" class="primary" title="Compare the public edge against the pinned origin">Compare origin</button>
+         </div>
+         <div id="oc-result"></div>
+       </div>
      </section>
    </div>
 

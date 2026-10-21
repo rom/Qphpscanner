@@ -61,6 +61,8 @@ type flags struct {
 	basicAuth string
 	vhost     string
 	proxy     string
+	resolve   stringSlice
+	sni       string
 
 	// data / resume / reporting extras
 	vulnFeeds        stringSlice
@@ -165,6 +167,8 @@ func bindFlags(fs *flag.FlagSet) *flags {
 	fs.StringVar(&f.basicAuth, "basic", "", "HTTP Basic auth as user:pass")
 	fs.StringVar(&f.vhost, "vhost", "", "override the Host header (virtual-host scanning)")
 	fs.StringVar(&f.proxy, "proxy", "", "route requests via an http(s):// or socks5:// proxy")
+	fs.Var(&f.resolve, "resolve", "pin HOST:PORT:ADDR so HOST:PORT dials ADDR, curl-style (repeatable; e.g. origin behind a CDN)")
+	fs.StringVar(&f.sni, "sni", "", "override the TLS SNI server name (independent of the Host header)")
 
 	// Vulnerability data / resume / reporting extras.
 	fs.Var(&f.vulnFeeds, "vuln-feed", "external vuln feed: native, OSV or CSAF JSON, file or URL (repeatable)")

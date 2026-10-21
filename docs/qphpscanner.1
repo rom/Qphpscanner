@@ -152,6 +152,20 @@ Override the Host header (virtual-host scanning).
 .BI \-\-proxy " url"
 Route requests through an http(s):// or socks5:// proxy.
 .TP
+.BI \-\-resolve " host:port:addr"
+Pin
+.I host:port
+to dial
+.I addr
+instead (curl \-\-resolve style), keeping the URL host for the Host header and
+TLS SNI. Use it to reach an origin behind a CDN. Repeatable.
+.TP
+.BI \-\-sni " name"
+Override the TLS SNI server name, independent of the Host header. A name that
+does not match the presented certificate fails verification unless
+.B \-\-insecure
+is set.
+.TP
 .BI \-\-favicon\-catalog " file|url"
 Load a favicon-hash → product catalogue (JSON) to attribute matched site
 favicons. Repeatable.

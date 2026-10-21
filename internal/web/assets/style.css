@@ -435,6 +435,9 @@ details > summary { cursor: pointer; font-size: .82rem; color: var(--accent-2); 
 .history-targets { font-size: .76rem; color: var(--text-dim); margin: 6px 0 2px; font-family: ui-monospace, Menlo, Consolas, monospace; }
 .history-body { margin-top: 10px; }
 
+.origin-check { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 14px; }
+.origin-check > h3 { margin: 0 0 6px; font-size: .95rem; }
+
 .footer { padding: 16px 24px; color: var(--text-dim); font-size: .78rem; border-top: 1px solid var(--border); }
 .footer p { margin: 0; }
 .footer-version { margin-top: 4px !important; font-family: ui-monospace, Menlo, Consolas, monospace; opacity: .8; }

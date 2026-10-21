@@ -95,6 +95,55 @@ type Recorder interface {
 	Record(Exchange)
 }
 
+// ResolveRule pins a logical host:port to a concrete dial address, the way
+// `curl --resolve HOST:PORT:ADDR` does. Port 0 matches any port; Addr may omit
+// a port, in which case the request's original port is kept.
+type ResolveRule struct {
+	Host string
+	Port int
+	Addr string
+}
+
+// ParseResolveRule parses a "host:port:addr" rule (curl --resolve style). addr
+// may be an IPv4/IPv6 literal (bare or bracketed) and may carry its own port;
+// otherwise the rule's port is used when dialing.
+func ParseResolveRule(s string) (ResolveRule, error) {
+	parts := strings.SplitN(strings.TrimSpace(s), ":", 3)
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return ResolveRule{}, fmt.Errorf("resolve rule %q: want HOST:PORT:ADDR", s)
+	}
+	port, err := strconv.Atoi(parts[1])
+	if err != nil || port < 1 || port > 65535 {
+		return ResolveRule{}, fmt.Errorf("resolve rule %q: invalid port %q", s, parts[1])
+	}
+	return ResolveRule{Host: parts[0], Port: port, Addr: parts[2]}, nil
+}
+
+// resolveAddr returns the replacement dial address for addr ("host:port") when
+// a rule matches, or "" when none does.
+func resolveAddr(rules []ResolveRule, addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	for _, r := range rules {
+		if !strings.EqualFold(r.Host, host) {
+			continue
+		}
+		if r.Port != 0 && strconv.Itoa(r.Port) != port {
+			continue
+		}
+		a := r.Addr
+		if _, _, e := net.SplitHostPort(a); e != nil {
+			// Addr carries no port (common for a bare IP, incl. IPv6): keep the
+			// request's port. JoinHostPort brackets IPv6 as needed.
+			a = net.JoinHostPort(a, port)
+		}
+		return a
+	}
+	return ""
+}
+
 // Fetcher issues HTTP(S) requests with a fixed policy.
 type Fetcher struct {
 	client       *http.Client
@@ -136,6 +185,16 @@ type FetcherConfig struct {
 	// HostHeader overrides the Host header on the initial request (vhost
 	// scanning); it is not carried across redirects to other hosts.
 	HostHeader string
+	// Resolve pins specific host:port pairs to a fixed dial address, like
+	// `curl --resolve HOST:PORT:ADDR`. Requests to other hosts resolve normally.
+	// (Ignored for the target host when an http(s) proxy is used, since the
+	// proxy performs resolution.)
+	Resolve []ResolveRule
+	// SNIServerName overrides the TLS SNI / ServerName for HTTPS requests. Empty
+	// uses the URL host. It is global to the fetcher (intended for single-origin
+	// scans); a name that does not match the presented certificate fails
+	// verification unless Insecure is set.
+	SNIServerName string
 	// ProxyURL routes requests through an http(s):// or socks5(h):// proxy.
 	// Empty uses the environment proxy settings.
 	ProxyURL string
@@ -189,6 +248,9 @@ func NewFetcher(cfg FetcherConfig) *Fetcher {
 		IdleConnTimeout:       30 * time.Second,
 		DisableCompression:    false,
 	}
+	if cfg.SNIServerName != "" {
+		transport.TLSClientConfig.ServerName = cfg.SNIServerName
+	}
 	if cfg.ProxyURL != "" {
 		if err := applyProxy(transport, baseDialer, cfg.ProxyURL); err != nil {
 			// Fall back to a resolver that errors on use, so the misconfig is
@@ -196,6 +258,19 @@ func NewFetcher(cfg FetcherConfig) *Fetcher {
 			transport.DialContext = func(_ context.Context, _, _ string) (net.Conn, error) {
 				return nil, err
 			}
+		}
+	}
+	// Pin matching host:port pairs to a fixed dial address. Wrapping after any
+	// proxy setup means a SOCKS target address is rewritten too; with an http
+	// proxy the dial target is the proxy, so only non-proxied hosts are pinned.
+	if len(cfg.Resolve) > 0 {
+		rules := append([]ResolveRule(nil), cfg.Resolve...)
+		base := transport.DialContext
+		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if repl := resolveAddr(rules, addr); repl != "" {
+				addr = repl
+			}
+			return base(ctx, network, addr)
 		}
 	}
 

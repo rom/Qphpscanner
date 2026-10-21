@@ -10,12 +10,15 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/rom/qphpscanner/internal/portspec"
+	"github.com/rom/qphpscanner/internal/probe"
 	"github.com/rom/qphpscanner/internal/report"
 	"github.com/rom/qphpscanner/internal/scanner"
 	"github.com/rom/qphpscanner/internal/version"
@@ -69,6 +72,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/diff-upload", s.handleDiffUpload)
 	mux.HandleFunc("GET /api/overview", s.handleOverview)
+	mux.HandleFunc("POST /api/origin-compare", s.handleOriginCompare)
 	mux.HandleFunc("GET /api/version", s.handleVersion)
 	// Any other /api/ request (wrong method, unknown path) gets a clean JSON
 	// error instead of falling through to the file server, whose 404/405 for a
@@ -108,10 +112,11 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 // is wrong, otherwise a 404.
 func (s *Server) handleAPIFallback(w http.ResponseWriter, r *http.Request) {
 	known := map[string]string{
-		"/api/scan":     http.MethodPost,
-		"/api/download": http.MethodGet,
-		"/api/history":  http.MethodGet,
-		"/api/version":  http.MethodGet,
+		"/api/scan":           http.MethodPost,
+		"/api/download":       http.MethodGet,
+		"/api/history":        http.MethodGet,
+		"/api/version":        http.MethodGet,
+		"/api/origin-compare": http.MethodPost,
 	}
 	if want, ok := known[r.URL.Path]; ok {
 		w.Header().Set("Allow", want+", OPTIONS")
@@ -195,6 +200,8 @@ type scanRequest struct {
 	HostConcurrency int      `json:"host_concurrency"`
 	Allow           []string `json:"allow"`
 	Block           []string `json:"block"`
+	Resolve         []string `json:"resolve"` // "host:port:addr" rules
+	SNI             string   `json:"sni"`     // TLS SNI override
 }
 
 // streamMsg is one line of the NDJSON response stream.
@@ -233,7 +240,15 @@ func (s *Server) buildOptions(req scanRequest) (scanner.Options, []string, error
 		HostConcurrency: req.HostConcurrency,
 		Allowlist:       cleanTargets(req.Allow),
 		Blocklist:       cleanTargets(req.Block),
+		SNIServerName:   strings.TrimSpace(req.SNI),
 		MaxHostsPerSpec: s.maxTargets,
+	}
+	if rules := cleanTargets(req.Resolve); len(rules) > 0 {
+		parsed, err := parseResolveRules(rules)
+		if err != nil {
+			return scanner.Options{}, nil, err
+		}
+		opts.Resolve = parsed
 	}
 	if req.Ports != "" {
 		ports, err := parsePortsField(req.Ports)
@@ -465,6 +480,118 @@ func scanMeta(res *scanner.ScanResult) map[string]interface{} {
 // all retained scans.
 func (s *Server) handleOverview(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.computeOverview())
+}
+
+// originCompareRequest asks for an edge-vs-origin comparison: the same logical
+// target is scanned normally (through the CDN/edge) and again with the
+// connection pinned to an operator-supplied origin address, keeping the real
+// Host and TLS SNI.
+type originCompareRequest struct {
+	Target      string `json:"target"`
+	Origin      string `json:"origin"`
+	Ports       string `json:"ports"`
+	Mode        string `json:"mode"`
+	TLS         string `json:"tls"`
+	Insecure    bool   `json:"insecure"`
+	SecurityTxt bool   `json:"security_txt"`
+}
+
+// handleOriginCompare scans target via the edge and via a pinned origin IP and
+// returns the structured difference (what the origin reveals beyond the edge).
+func (s *Server) handleOriginCompare(w http.ResponseWriter, r *http.Request) {
+	var req originCompareRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid request: " + err.Error()})
+		return
+	}
+	target := strings.TrimSpace(req.Target)
+	origin := strings.TrimSpace(req.Origin)
+	if target == "" || origin == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "both target and origin are required"})
+		return
+	}
+	host := hostOf(target)
+	if host == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "could not derive a host from the target"})
+		return
+	}
+
+	base := scanner.Options{
+		Mode:            normMode(req.Mode),
+		TLSMode:         normTLS(req.TLS),
+		Follow:          true,
+		SecurityTxt:     req.SecurityTxt,
+		Insecure:        req.Insecure,
+		MaxHostsPerSpec: s.maxTargets,
+	}
+	if req.Mode == "" {
+		base.Mode = scanner.ModeDeep // deep is the most informative for a diff
+	}
+	if req.Ports != "" {
+		ports, err := parsePortsField(req.Ports)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
+			return
+		}
+		base.Ports = ports
+	}
+
+	ctx := r.Context()
+	edge, err := scanner.Scan(ctx, []string{target}, base)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{"error": "edge scan failed: " + err.Error()})
+		return
+	}
+	originOpts := base
+	// Pin every probed port of this host to the origin address; keep the real
+	// hostname as the TLS SNI so a correct origin certificate still verifies.
+	originOpts.Resolve = []probe.ResolveRule{{Host: host, Port: 0, Addr: origin}}
+	originOpts.SNIServerName = host
+	originRes, err := scanner.Scan(ctx, []string{target}, originOpts)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]interface{}{"error": "origin scan failed: " + err.Error()})
+		return
+	}
+	s.store(edge)
+	s.store(originRes)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"host":        host,
+		"origin_addr": origin,
+		"edge":        scanMeta(edge),
+		"origin":      scanMeta(originRes),
+		"diff":        report.Diff(edge, originRes),
+	})
+}
+
+// hostOf extracts the bare hostname from a URL or host[:port] target.
+func hostOf(t string) string {
+	t = strings.TrimSpace(t)
+	if strings.Contains(t, "://") {
+		if u, err := url.Parse(t); err == nil && u.Hostname() != "" {
+			return u.Hostname()
+		}
+	}
+	if i := strings.IndexAny(t, "/"); i >= 0 {
+		t = t[:i]
+	}
+	if h, _, err := net.SplitHostPort(t); err == nil {
+		return h
+	}
+	return t
+}
+
+// parseResolveRules turns "host:port:addr" strings into probe rules.
+func parseResolveRules(rules []string) ([]probe.ResolveRule, error) {
+	out := make([]probe.ResolveRule, 0, len(rules))
+	for _, s := range rules {
+		r, err := probe.ParseResolveRule(s)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, nil
 }
 
 // handleVersion reports the build version so the GUI can show it in the footer.
