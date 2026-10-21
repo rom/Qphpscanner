@@ -397,6 +397,16 @@ details > summary { cursor: pointer; font-size: .82rem; color: var(--accent-2); 
   transition: width .2s ease;
 }
 .progress-text { margin-top: 6px; font-size: .82rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.progress-time { margin-top: 3px; font-size: .76rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.cap-note {
+  margin: 10px 2px 2px;
+  padding: 8px 10px;
+  font-size: .8rem;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
 .progress-log {
   margin-top: 8px;
   max-height: 150px;
@@ -426,3 +436,5 @@ details > summary { cursor: pointer; font-size: .82rem; color: var(--accent-2); 
 .history-body { margin-top: 10px; }
 
 .footer { padding: 16px 24px; color: var(--text-dim); font-size: .78rem; border-top: 1px solid var(--border); }
+.footer p { margin: 0; }
+.footer-version { margin-top: 4px !important; font-family: ui-monospace, Menlo, Consolas, monospace; opacity: .8; }

@@ -60,6 +60,9 @@ type overviewStats struct {
 	// services by verdict.
 	SeverityBreakdown map[string]int `json:"severity_breakdown"`
 	VerdictBreakdown  map[string]int `json:"verdict_breakdown"`
+	// PHPByPort counts PHP-classified services per scheme/port (e.g.
+	// "https/443", "http/80") to show how PHP is split across ports.
+	PHPByPort map[string]int `json:"php_by_port"`
 }
 
 type overview struct {
@@ -87,6 +90,7 @@ func (s *Server) computeOverview() overview {
 	var stats overviewStats
 	stats.SeverityBreakdown = map[string]int{}
 	stats.VerdictBreakdown = map[string]int{}
+	stats.PHPByPort = map[string]int{}
 	var durSum int64
 	var durN int
 	stats.Scans = len(items)
@@ -110,6 +114,7 @@ func (s *Server) computeOverview() overview {
 				}
 				if p.Verdict != "none" && p.Verdict != "" {
 					stats.PHPServices++
+					stats.PHPByPort[portKey(svc.Scheme, svc.Port)]++
 				}
 				if v := string(p.Verdict); v != "" {
 					stats.VerdictBreakdown[v]++
@@ -225,6 +230,16 @@ func considerOldestApp(stats *overviewStats, name, version, host, url string) {
 	if stats.OldestApp == nil || versionLess(version, stats.OldestApp.Version) {
 		stats.OldestApp = &appRef{Name: name, Version: version, Host: host, URL: url}
 	}
+}
+
+// portKey labels a service by scheme and port for the PHP-per-port breakdown,
+// e.g. "https/443" or "http/80". A missing scheme falls back to the port alone.
+func portKey(scheme string, port int) string {
+	p := strconv.Itoa(port)
+	if scheme == "" {
+		return p
+	}
+	return scheme + "/" + p
 }
 
 // networkKey groups a host into a network: /24 for IPv4, /48 for IPv6, else the

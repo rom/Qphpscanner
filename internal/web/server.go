@@ -18,6 +18,7 @@ import (
 	"github.com/rom/qphpscanner/internal/portspec"
 	"github.com/rom/qphpscanner/internal/report"
 	"github.com/rom/qphpscanner/internal/scanner"
+	"github.com/rom/qphpscanner/internal/version"
 )
 
 //go:embed assets
@@ -68,6 +69,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/diff-upload", s.handleDiffUpload)
 	mux.HandleFunc("GET /api/overview", s.handleOverview)
+	mux.HandleFunc("GET /api/version", s.handleVersion)
 	// Any other /api/ request (wrong method, unknown path) gets a clean JSON
 	// error instead of falling through to the file server, whose 404/405 for a
 	// POST is opaque to the GUI.
@@ -109,6 +111,7 @@ func (s *Server) handleAPIFallback(w http.ResponseWriter, r *http.Request) {
 		"/api/scan":     http.MethodPost,
 		"/api/download": http.MethodGet,
 		"/api/history":  http.MethodGet,
+		"/api/version":  http.MethodGet,
 	}
 	if want, ok := known[r.URL.Path]; ok {
 		w.Header().Set("Allow", want+", OPTIONS")
@@ -196,11 +199,16 @@ type scanRequest struct {
 
 // streamMsg is one line of the NDJSON response stream.
 type streamMsg struct {
-	Type    string                 `json:"type"` // "progress" | "service" | "result" | "error"
+	Type    string                 `json:"type"` // "progress" | "service" | "host" | "result" | "error"
 	Event   *scanner.ProgressEvent `json:"event,omitempty"`
 	Service *scanner.ServiceResult `json:"service,omitempty"`
 	Result  *scanner.ScanResult    `json:"result,omitempty"`
 	Error   string                 `json:"error,omitempty"`
+	// Host DNS resolution ("host" messages), streamed before a host's services
+	// so the GUI can show the resolved name of an IP target live.
+	Host      string   `json:"host,omitempty"`
+	Addresses []string `json:"addresses,omitempty"`
+	PTR       []string `json:"ptr,omitempty"`
 }
 
 // buildOptions turns a request into scanner options, or returns a user error.
@@ -281,6 +289,12 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	opts.OnService = func(res scanner.ServiceResult) {
 		r := res
 		send(streamMsg{Type: "service", Service: &r})
+	}
+	// Stream each host's resolved DNS before its services so the GUI shows the
+	// resolved name (e.g. the PTR of an IP target) on the first result, not
+	// only once the whole scan finishes.
+	opts.OnHostResolved = func(host string, addrs, ptr []string) {
+		send(streamMsg{Type: "host", Host: host, Addresses: addrs, PTR: ptr})
 	}
 
 	// No artificial scan deadline: a long scan runs until it finishes or the
@@ -451,6 +465,16 @@ func scanMeta(res *scanner.ScanResult) map[string]interface{} {
 // all retained scans.
 func (s *Server) handleOverview(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.computeOverview())
+}
+
+// handleVersion reports the build version so the GUI can show it in the footer.
+func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"name":    version.Name,
+		"version": version.Version,
+		"commit":  version.Commit,
+		"date":    version.Date,
+	})
 }
 
 // handleHistory lists retained scans (newest first) with light summaries.

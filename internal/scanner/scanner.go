@@ -54,6 +54,12 @@ type Options struct {
 	// closed-port output filter — so streaming consumers can render partial
 	// results that survive a cancellation or timeout.
 	OnService func(ServiceResult)
+	// OnHostResolved, when set and ResolveDNS is enabled, fires once per host
+	// with its forward (A/AAAA) and reverse (PTR) names as soon as they are
+	// resolved — before that host's services are probed — so a streaming
+	// consumer can show the resolved hostname of an IP target live rather than
+	// only after the whole scan finishes.
+	OnHostResolved func(host string, addrs, ptr []string)
 	// DisableDNSEnum turns off "*.domain" subdomain enumeration.
 	DisableDNSEnum bool
 	// Enumerator overrides the default Certificate Transparency enumerator
@@ -259,6 +265,14 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 	var progMu sync.Mutex
 	doneCount := 0
 
+	// Per-host DNS cache: resolved once at the start of each host's goroutine
+	// (when enabled) and reused for the final TargetResult so DNS is not looked
+	// up twice. Protected by its own mutex because host goroutines run
+	// concurrently.
+	type dnsRecord struct{ addrs, ptr []string }
+	var dnsMu sync.Mutex
+	dnsCache := map[string]dnsRecord{}
+
 	runJob := func(idx int) {
 		j := jobs[idx]
 		k := jobKey(j.ep.Host, j.port)
@@ -300,6 +314,22 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 		go func(host string) {
 			defer wg.Done()
 			defer func() { <-hostSem }()
+
+			// Resolve DNS for the host before probing its services, so a
+			// streaming consumer can show the resolved name (notably a PTR for
+			// an IP target) alongside the first result rather than only after
+			// the scan completes.
+			if opts.ResolveDNS {
+				addrs, ptr := resolveHost(ctx, opts.resolver(), host)
+				dnsMu.Lock()
+				dnsCache[host] = dnsRecord{addrs: addrs, ptr: ptr}
+				dnsMu.Unlock()
+				if opts.OnHostResolved != nil {
+					progMu.Lock()
+					opts.OnHostResolved(host, addrs, ptr)
+					progMu.Unlock()
+				}
+			}
 
 			var hwg sync.WaitGroup
 			for _, idx := range jobsByHost[host] {
@@ -353,7 +383,15 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 		}
 		tr := TargetResult{Host: h, Inputs: inputs, Services: svcs}
 		if opts.ResolveDNS {
-			tr.Addresses, tr.PTR = resolveHost(ctx, opts.resolver(), h)
+			dnsMu.Lock()
+			rec, ok := dnsCache[h]
+			dnsMu.Unlock()
+			if !ok {
+				// Host goroutine was skipped (e.g. context cancelled before it
+				// ran); resolve now as a fallback.
+				rec.addrs, rec.ptr = resolveHost(ctx, opts.resolver(), h)
+			}
+			tr.Addresses, tr.PTR = rec.addrs, rec.ptr
 		}
 		out.Targets = append(out.Targets, tr)
 	}
@@ -459,7 +497,7 @@ func summarise(results []ServiceResult, hosts []string, opts Options) Summary {
 
 func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Options) ServiceResult {
 	start := time.Now()
-	res := ServiceResult{Host: j.ep.Host, Port: j.port}
+	res := ServiceResult{Host: j.ep.Host, Port: j.port, CheckedAt: start}
 
 	// TCP connect check first.
 	status := probe.CheckPort(ctx, j.ep.Host, j.port, opts.Timeout)

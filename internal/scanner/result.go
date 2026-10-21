@@ -72,6 +72,9 @@ type ServiceResult struct {
 	PHP         *php.Detection           `json:"php,omitempty" xml:"php,omitempty"`
 	SecurityTxt *securitytxt.SecurityTxt `json:"security_txt,omitempty" xml:"security_txt,omitempty"`
 	DurationMS  int64                    `json:"duration_ms" xml:"duration_ms"`
+	// CheckedAt is when this endpoint was probed (the moment the scan of this
+	// service began). Zero for results restored from an older checkpoint.
+	CheckedAt time.Time `json:"checked_at,omitempty" xml:"checked_at,omitempty"`
 }
 
 // HTTPInfo is a serialisable summary of the primary HTTP response.

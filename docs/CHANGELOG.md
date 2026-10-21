@@ -6,7 +6,26 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Web GUI shows the build version in the page footer (`/api/version`).
+- Statistics: a **PHP services by port** breakdown (e.g. http/80 vs https/443).
+- Progress bar now shows when the scan **started**, how long it has been
+  **running**, and when it **ended**.
+- Each result card shows **when it was scanned** (`checked_at`).
+- `make release` cross-compiles binaries for linux/darwin/windows
+  (amd64+arm64) into `dist/` as `.tar.gz`/`.zip` archives with a `SHA256SUMS`.
+
+### Changed
+
+- Web GUI renders streamed results incrementally with a per-bucket cap, so very
+  large scans (thousands of ports) no longer hang the browser.
+
+### Fixed
+
+- Resolve-DNS now streams each host's resolved names before its services, so an
+  IP target shows its reverse (PTR) hostname while the scan runs, not only after
+  it completes.
 
 ## [1.0.0] - 2026-10-21
 
