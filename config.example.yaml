@@ -114,8 +114,17 @@ sni: ""
 
 # --- Data / resume / targets --------------------------------------------------
 # External vulnerability feeds (native qphpscanner, OSV or CSAF; file or URL).
+# OSV "Packagist" records are ingested as package-level advisories and
+# correlated against the Composer dependency inventory.
 vuln_feeds:
   - docs/vuln-feed.example.json
+# Local Composer files to build the dependency inventory for a target whose
+# composer.json/composer.lock/installed.json are not web-exposed (deep mode).
+# The declared "php" platform requirement is kept distinct from the runtime
+# version and is never correlated as one.
+composer_files: []
+  # - path/to/composer.json
+  # - path/to/composer.lock
 # External favicon-hash → product catalogues (file or URL).
 favicon_catalogs: []
 # Allow/block lists override the target list. Each entry is an exact host/IP,

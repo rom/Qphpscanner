@@ -107,7 +107,7 @@ func convertOSV(data []byte) (*VulnFeed, error) {
 		records = []osvRecord{one}
 	}
 
-	feed := &VulnFeed{Schema: FeedSchema, CMS: map[string][]FeedEntry{}}
+	feed := &VulnFeed{Schema: FeedSchema, CMS: map[string][]FeedEntry{}, Packages: map[string][]FeedEntry{}}
 	for _, rec := range records {
 		title := firstText(rec.Summary, rec.Details, rec.ID)
 		if len(title) > 160 {
@@ -127,14 +127,28 @@ func convertOSV(data []byte) (*VulnFeed, error) {
 				Note: "OSV: " + aff.Package.Ecosystem + " " + aff.Package.Name, Affected: ranges,
 			}
 			key, isPHP := feedKeyForPackage(aff.Package.Ecosystem, aff.Package.Name)
-			if isPHP {
+			switch {
+			case isPHP:
 				feed.PHP = append(feed.PHP, entry)
-			} else if key != "" {
+			case isComposerEcosystem(aff.Package.Ecosystem) && !isKnownCMSName(aff.Package.Name):
+				// A Composer library package: key by its full vendor/package name
+				// so it correlates against the dependency inventory.
+				pkg := strings.ToLower(strings.TrimSpace(aff.Package.Name))
+				feed.Packages[pkg] = append(feed.Packages[pkg], entry)
+			case key != "":
 				feed.CMS[key] = append(feed.CMS[key], entry)
 			}
 		}
 	}
 	return feed, nil
+}
+
+// isKnownCMSName reports whether a package name maps to a curated CMS core
+// (which keeps CMS-core advisories in the CMS dimension rather than the
+// package dimension).
+func isKnownCMSName(name string) bool {
+	_, ok := knownCMSKey(name)
+	return ok
 }
 
 // osvRanges turns OSV event lists into RangeSpecs. Discrete versions (no range)
@@ -452,6 +466,20 @@ func feedKeyForPackage(ecosystem, name string) (key string, isPHP bool) {
 	if n == "php" || n == "php-src" || strings.HasPrefix(n, "php/") || strings.HasPrefix(n, "php:") {
 		return "", true
 	}
+	if k, ok := knownCMSKey(n); ok {
+		return k, false
+	}
+	if i := strings.LastIndex(n, "/"); i >= 0 {
+		n = n[i+1:]
+	}
+	return n, false
+}
+
+// knownCMSKey maps a package/product name to a curated CMS-core key, used both
+// to key CMS advisories and to tell a CMS core apart from an ordinary Composer
+// library package. It returns false when the name is not a recognised CMS core.
+func knownCMSKey(name string) (string, bool) {
+	n := strings.ToLower(strings.TrimSpace(name))
 	known := []struct{ sub, key string }{
 		{"drupal", "drupal"}, {"wordpress", "wordpress"}, {"wpackagist", "wordpress"},
 		{"joomla", "joomla"}, {"typo3", "typo3"}, {"laravel", "laravel"},
@@ -465,13 +493,16 @@ func feedKeyForPackage(ecosystem, name string) (key string, isPHP bool) {
 	}
 	for _, k := range known {
 		if strings.Contains(n, k.sub) {
-			return k.key, false
+			return k.key, true
 		}
 	}
-	if i := strings.LastIndex(n, "/"); i >= 0 {
-		n = n[i+1:]
-	}
-	return n, false
+	return "", false
+}
+
+// isComposerEcosystem reports whether an OSV ecosystem names Composer/Packagist.
+func isComposerEcosystem(eco string) bool {
+	e := strings.ToLower(strings.TrimSpace(eco))
+	return e == "packagist" || e == "composer"
 }
 
 func versionFromName(name string) string {

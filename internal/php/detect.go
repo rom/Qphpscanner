@@ -36,6 +36,10 @@ type Input struct {
 	// Catalog supplies vulnerability/EOL data. When nil, the built-in default
 	// catalogue is used.
 	Catalog *Catalog
+	// SuppliedComposer holds operator-provided Composer file contents (deep
+	// mode), for building a dependency inventory when the target's Composer
+	// files are not web-exposed.
+	SuppliedComposer []SuppliedComposerFile
 }
 
 const maxDataLen = 200
@@ -243,6 +247,31 @@ func Analyze(in Input) *Detection {
 		d.FrameworkVersions = cmsVersions
 	}
 
+	// --- Composer dependency inventory (deep mode) --------------------------
+	// Built from exposed or operator-supplied Composer metadata, independent of
+	// the final PHP verdict. The `php` platform requirement it carries is kept
+	// distinct from the detected runtime version and never correlated as one.
+	var cat *Catalog
+	if in.Deep {
+		cat = in.Catalog
+		if cat == nil {
+			cat = DefaultCatalog()
+		}
+		if inv, suppliedFound := buildComposerInventory(in, cat); inv != nil {
+			d.Composer = inv
+			// Operator-supplied Composer data is definitive PHP evidence; count
+			// it so a target whose files are not web-exposed still classifies as
+			// PHP and the deep correlation below runs.
+			if suppliedFound {
+				addEv(Evidence{
+					Signal: "diag.composer-supplied", Source: "operator-supplied", Weight: 45,
+					Detail: "Composer metadata supplied by the operator (PHP project)",
+					Where:  "operator-supplied file", How: "Composer manifest/lock parse",
+				})
+			}
+		}
+	}
+
 	// --- Finalise -----------------------------------------------------------
 	if d.Confidence > 100 {
 		d.Confidence = 100
@@ -265,10 +294,6 @@ func Analyze(in Input) *Detection {
 	}
 
 	if in.Deep && d.IsPHP {
-		cat := in.Catalog
-		if cat == nil {
-			cat = DefaultCatalog()
-		}
 		d.EndOfLife, d.EOLDetail = cat.EOL(d.Variant, d.Version)
 		d.Vulnerabilities = cat.CorrelatePHP(d.Variant, d.Version)
 		for fw, ver := range d.FrameworkVersions {

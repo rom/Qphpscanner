@@ -325,8 +325,41 @@ Three formats are auto-detected:
   advisory exports for Packagist packages,
 - **CSAF 2.0** advisories — vendor security documents (TYPO3, Drupal, …).
 
-PHP-core advisories feed the PHP correlation; everything else is keyed by a
-normalised framework/package name (drupal, wordpress, laravel, …).
+PHP-core advisories feed the PHP correlation; CMS cores are keyed by a
+normalised framework name (drupal, wordpress, laravel, …); and OSV **Packagist**
+library packages feed the package-advisory dimension, keyed by their full
+`vendor/package` name and correlated against the Composer inventory (below).
+
+## Composer dependency inventory
+
+In deep mode, when a project's Composer metadata is exposed or supplied,
+qphpscanner builds a structured dependency inventory (a partial SBOM) and shows
+it in the output, the reports and the web result card ("Composer packages").
+
+Three sources are parsed and merged by package name:
+
+- `composer.json` — declared `require` / `require-dev` constraints
+  (class **required**),
+- `composer.lock` — resolved, pinned versions (class **locked**),
+- `vendor/composer/installed.json` — concrete installed versions
+  (class **installed**), including the Composer 1 (bare array) and Composer 2
+  (object with `dev-package-names`) layouts.
+
+The strongest evidence wins the class (installed > locked > required); a declared
+constraint is shown alongside a resolved version, and dev-only dependencies are
+flagged. Each resolved package is correlated against package-level advisories
+(built-in plus any OSV Packagist feed) and reported as informational,
+version-range leads — never confirmed findings.
+
+The Composer **`php`** platform requirement (e.g. `"php": "^8.1"`) is captured
+as a requirement and kept strictly separate from the detected runtime version;
+it is never fed into PHP-version correlation.
+
+For a target whose Composer files are not web-exposed, supply them locally with
+`--composer-file FILE` (repeatable; YAML `composer_files:`; or upload them in the
+web GUI under "Composer files"). The inventory is then built from the provided
+files. Parsing is bounded (package and size caps) and a malformed or oversized
+file is skipped gracefully.
 
 ## Favicon catalogue
 

@@ -16,6 +16,7 @@ func writeCSV(w io.Writer, res *scanner.ScanResult) error {
 		"http_status", "server", "powered_by",
 		"php_verdict", "php_confidence", "php_variant", "php_version",
 		"end_of_life", "frameworks", "vuln_count", "vuln_ids", "max_severity",
+		"composer_packages", "composer_advisory_leads",
 		"security_txt", "server_product", "server_version", "behind_proxy", "cdn", "waf",
 	}
 	if err := cw.Write(header); err != nil {
@@ -41,15 +42,21 @@ func writeCSV(w io.Writer, res *scanner.ScanResult) error {
 				for _, v := range s.PHP.Vulnerabilities {
 					ids = append(ids, v.ID)
 				}
+				composerPkgs, composerAdv := 0, 0
+				if s.PHP.Composer != nil {
+					composerPkgs = len(s.PHP.Composer.Packages)
+					composerAdv = s.PHP.Composer.AdvisoryCount()
+				}
 				row = append(row,
 					string(s.PHP.Verdict), fmt.Sprintf("%d", s.PHP.Confidence),
 					s.PHP.Variant, s.PHP.Version, fmt.Sprintf("%t", s.PHP.EndOfLife),
 					strings.Join(s.PHP.Frameworks, "|"),
 					fmt.Sprintf("%d", len(s.PHP.Vulnerabilities)),
 					strings.Join(ids, "|"), maxSev,
+					fmt.Sprintf("%d", composerPkgs), fmt.Sprintf("%d", composerAdv),
 				)
 			} else {
-				row = append(row, "", "", "", "", "", "", "0", "", "")
+				row = append(row, "", "", "", "", "", "", "0", "", "", "0", "0")
 			}
 			row = append(row, fmt.Sprintf("%t", s.SecurityTxt != nil && s.SecurityTxt.Present))
 

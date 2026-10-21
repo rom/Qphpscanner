@@ -558,6 +558,57 @@ var builtinCMS = map[string][]FeedEntry{
 	},
 }
 
+// builtinPackages holds a small, high-signal set of Composer package advisories,
+// keyed by the package's canonical name (vendor/package, lowercase). This is a
+// seed: the OSV "Packagist" ecosystem (ingested via --vuln-feed) is the main
+// source of package-level advisories. Matches are version-range-correlated,
+// informational leads — not confirmed, exploited findings.
+var builtinPackages = map[string][]FeedEntry{
+	"guzzlehttp/guzzle": {
+		{
+			ID: "CVE-2022-31042", Severity: "high",
+			Title:       "Guzzle: Cookie header not stripped on host change / HTTP downgrade redirect",
+			Description: "On a cross-host (or HTTPS→HTTP) redirect Guzzle did not strip the Cookie header, leaking cookies to an unrelated origin.",
+			Reference:   nvd + "CVE-2022-31042",
+			Affected:    []RangeSpec{rng("6.0.0", "6.5.6"), rng("7.0.0", "7.4.3")},
+		},
+		{
+			ID: "CVE-2022-31090", Severity: "medium",
+			Title:       "Guzzle: CURLOPT_HTTPAUTH not cleared on cross-host redirect (curl handler)",
+			Description: "The curl handler could forward HTTP Authorization credentials to a different host across a redirect.",
+			Reference:   nvd + "CVE-2022-31090",
+			Affected:    []RangeSpec{rng("6.0.0", "6.5.8"), rng("7.0.0", "7.4.5")},
+		},
+	},
+	"phpmailer/phpmailer": {
+		{
+			ID: "CVE-2020-13625", Severity: "high",
+			Title:       "PHPMailer: insufficient escaping of attachment filenames",
+			Description: "Improper output escaping in attachment handling could enable object injection / cross-site scripting.",
+			Reference:   nvd + "CVE-2020-13625",
+			Affected:    []RangeSpec{lo("6.1.6")},
+		},
+	},
+	"twig/twig": {
+		{
+			ID: "CVE-2022-23614", Severity: "high",
+			Title:       "Twig: sandbox security policy bypass",
+			Description: "A crafted template could bypass the Twig sandbox's security policy and call disallowed methods/filters.",
+			Reference:   nvd + "CVE-2022-23614",
+			Affected:    []RangeSpec{lo("1.44.7"), rng("2.0.0", "2.14.11"), rng("3.0.0", "3.3.8")},
+		},
+	},
+	"symfony/http-kernel": {
+		{
+			ID: "CVE-2022-24894", Severity: "medium",
+			Title:       "Symfony HttpKernel: sensitive HTTP header disclosure via cached responses",
+			Description: "The HttpCache could store and serve responses containing cookies or private cache headers, disclosing them to other clients.",
+			Reference:   nvd + "CVE-2022-24894",
+			Affected:    []RangeSpec{rng("4.4.0", "4.4.50"), rng("5.4.0", "5.4.20"), rng("6.0.0", "6.0.20"), rng("6.1.0", "6.1.12"), rng("6.2.0", "6.2.6")},
+		},
+	},
+}
+
 // builtinEOL maps a major.minor branch to its end of security support date.
 var builtinEOL = map[string]string{
 	"5.4": "2015-09-14",

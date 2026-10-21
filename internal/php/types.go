@@ -113,6 +113,10 @@ type Detection struct {
 
 	Evidence        []Evidence      `json:"evidence,omitempty"`
 	Vulnerabilities []Vulnerability `json:"vulnerabilities,omitempty"`
+
+	// Composer is the dependency inventory (partial SBOM) built from exposed or
+	// operator-supplied Composer metadata. Nil when no Composer data was found.
+	Composer *ComposerInventory `json:"composer,omitempty" xml:"composer,omitempty"`
 }
 
 // scoreToVerdict maps a confidence score to a verdict band.

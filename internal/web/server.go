@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/portspec"
 	"github.com/rom/qphpscanner/internal/probe"
 	"github.com/rom/qphpscanner/internal/report"
@@ -202,6 +203,17 @@ type scanRequest struct {
 	Block           []string `json:"block"`
 	Resolve         []string `json:"resolve"` // "host:port:addr" rules
 	SNI             string   `json:"sni"`     // TLS SNI override
+	// ComposerFiles are operator-supplied Composer files (composer.json /
+	// composer.lock / installed.json) uploaded to build the dependency
+	// inventory without reading them off the target.
+	ComposerFiles []composerUpload `json:"composer_files"`
+}
+
+// composerUpload is one uploaded Composer file: a name (for provenance and
+// classification) plus its text content.
+type composerUpload struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
 }
 
 // streamMsg is one line of the NDJSON response stream.
@@ -260,14 +272,39 @@ func (s *Server) buildOptions(req scanRequest) (scanner.Options, []string, error
 	if req.TimeoutSeconds > 0 {
 		opts.Timeout = time.Duration(req.TimeoutSeconds) * time.Second
 	}
+	if len(req.ComposerFiles) > 0 {
+		opts.ComposerFiles = composerFilesFromUploads(req.ComposerFiles)
+	}
 	return opts, targets, nil
+}
+
+// maxComposerUploadBytes bounds how large a single uploaded Composer file may be.
+const maxComposerUploadBytes = 3 << 20 // 3 MiB
+
+// composerFilesFromUploads converts uploaded Composer files into scanner inputs,
+// dropping empty or oversized entries.
+func composerFilesFromUploads(uploads []composerUpload) []php.SuppliedComposerFile {
+	var out []php.SuppliedComposerFile
+	for _, u := range uploads {
+		if strings.TrimSpace(u.Content) == "" || len(u.Content) > maxComposerUploadBytes {
+			continue
+		}
+		name := strings.TrimSpace(u.Name)
+		if name == "" {
+			name = "upload"
+		}
+		out = append(out, php.SuppliedComposerFile{Name: name, Data: []byte(u.Content)})
+	}
+	return out
 }
 
 // handleScan runs a scan and streams NDJSON: a line per progress event
 // followed by a final {"type":"result", ...} line (or {"type":"error"}).
 func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	var req scanRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+	// The body cap is generous (8 MiB) because the request may carry uploaded
+	// Composer files (composer.lock can be sizeable) alongside the scan options.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, streamMsg{Type: "error", Error: "invalid request: " + err.Error()})
 		return
 	}

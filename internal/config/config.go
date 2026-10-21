@@ -52,6 +52,7 @@ type Config struct {
 
 	// Data / resume / targets.
 	VulnFeeds        []string
+	ComposerFiles    []string
 	FaviconCatalogs  []string
 	Allow            []string
 	Block            []string
@@ -135,6 +136,7 @@ func Load(path string) (*Config, error) {
 	c.Log = getString(m, "log")
 	c.Headers = getHeaders(m, "headers")
 	c.VulnFeeds = getStringSlice(m, "vuln_feeds")
+	c.ComposerFiles = getStringSlice(m, "composer_files")
 	c.FaviconCatalogs = getStringSlice(m, "favicon_catalogs")
 	c.Allow = getStringSlice(m, "allow")
 	c.Block = getStringSlice(m, "block")

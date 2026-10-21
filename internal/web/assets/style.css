@@ -373,6 +373,14 @@ details > summary { cursor: pointer; font-size: .82rem; color: var(--accent-2); 
 .sev.medium { background: var(--yellow); }
 .sev.low { background: var(--gray); color: #fff; }
 
+.complist { margin: 8px 0 0; padding-left: 0; list-style: none; font-size: .8rem; }
+.complist > li { padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.complist .vulnlist { margin: 4px 0 0 18px; }
+.pkgclass { display: inline-block; min-width: 62px; text-align: center; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; padding: 1px 6px; border-radius: 5px; margin-right: 6px; background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-dim); }
+.pkgclass.c-installed { border-color: var(--green, #3fae6b); color: var(--green, #3fae6b); }
+.pkgclass.c-locked { border-color: var(--blue, #4a90d9); color: var(--blue, #4a90d9); }
+.pkgclass.c-required { border-color: var(--gray); color: var(--text-dim); }
+
 .note { font-size: .76rem; color: var(--text-dim); font-style: italic; margin-top: 6px; }
 .warn { color: var(--orange); font-weight: 600; }
 .sectxt { margin-top: 10px; padding: 10px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; font-size: .82rem; }

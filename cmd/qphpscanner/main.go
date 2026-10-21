@@ -142,6 +142,15 @@ func run(args []string) error {
 		opts.Catalog = cat
 	}
 
+	// Load any operator-supplied Composer files for the dependency inventory.
+	if len(f.composerFiles) > 0 {
+		supplied, err := readComposerFiles(f.composerFiles)
+		if err != nil {
+			return err
+		}
+		opts.ComposerFiles = supplied
+	}
+
 	// Register any external favicon-hash catalogues before scanning.
 	for _, src := range f.faviconCatalogs {
 		n, err := php.LoadFaviconCatalog(ctx, src, nil)
@@ -459,6 +468,7 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		}
 		// Feeds and catalogues from config run before any from the CLI.
 		f.vulnFeeds = append(stringSlice(cfg.VulnFeeds), f.vulnFeeds...)
+		f.composerFiles = append(stringSlice(cfg.ComposerFiles), f.composerFiles...)
 		f.faviconCatalogs = append(stringSlice(cfg.FaviconCatalogs), f.faviconCatalogs...)
 	}
 
@@ -650,6 +660,37 @@ func parseHeaders(hs stringSlice) map[string]string {
 		}
 	}
 	return m
+}
+
+// maxComposerFileBytes bounds how much of an operator-supplied Composer file is
+// read, so a huge file cannot exhaust memory.
+const maxComposerFileBytes = 3 << 20 // 3 MiB
+
+// readComposerFiles reads operator-supplied Composer files (composer.json /
+// composer.lock / installed.json) into the scanner's supplied-file list, keeping
+// the path as a provenance label. Files larger than the cap are rejected.
+func readComposerFiles(paths []string) ([]php.SuppliedComposerFile, error) {
+	var out []php.SuppliedComposerFile
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		fh, err := os.Open(p)
+		if err != nil {
+			return nil, fmt.Errorf("read composer file: %w", err)
+		}
+		data, err := io.ReadAll(io.LimitReader(fh, maxComposerFileBytes+1))
+		fh.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read composer file %q: %w", p, err)
+		}
+		if int64(len(data)) > maxComposerFileBytes {
+			return nil, fmt.Errorf("composer file %q exceeds the %d-byte limit", p, maxComposerFileBytes)
+		}
+		out = append(out, php.SuppliedComposerFile{Name: p, Data: data})
+	}
+	return out, nil
 }
 
 func readTargetsFile(path string) ([]string, error) {

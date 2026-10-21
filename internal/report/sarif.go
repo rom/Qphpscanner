@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/json"
 	"io"
+	"strings"
 
 	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/scanner"
@@ -124,6 +125,26 @@ func writeSARIF(w io.Writer, res *scanner.ScanResult) error {
 					Locations:  loc,
 					Properties: map[string]interface{}{"host": s.Host, "port": s.Port},
 				})
+			}
+
+			// Composer package advisory leads (version-range correlations).
+			if s.PHP.Composer != nil {
+				for _, p := range s.PHP.Composer.Packages {
+					for _, a := range p.Advisories {
+						addRule(a.ID, a.Title, a.Title, a.Reference, a.Severity, []string{"security", "vulnerability", "dependency"})
+						results = append(results, sarifResult{
+							RuleID:    a.ID,
+							Level:     sarifLevel(a.Severity),
+							Message:   sarifText{Text: a.ID + ": " + strings.TrimSpace(p.Name+" "+p.Version) + " — " + a.Title + " (" + a.AffectedVersions + ")"},
+							Locations: loc,
+							Properties: map[string]interface{}{
+								"severity": a.Severity, "host": s.Host, "port": s.Port,
+								"composer_package": p.Name, "package_version": p.Version,
+								"match_basis": a.MatchBasis,
+							},
+						})
+					}
+				}
 			}
 		}
 	}

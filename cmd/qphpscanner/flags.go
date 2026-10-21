@@ -66,6 +66,7 @@ type flags struct {
 
 	// data / resume / reporting extras
 	vulnFeeds        stringSlice
+	composerFiles    stringSlice
 	faviconCatalogs  stringSlice
 	allow            stringSlice
 	block            stringSlice
@@ -172,6 +173,7 @@ func bindFlags(fs *flag.FlagSet) *flags {
 
 	// Vulnerability data / resume / reporting extras.
 	fs.Var(&f.vulnFeeds, "vuln-feed", "external vuln feed: native, OSV or CSAF JSON, file or URL (repeatable)")
+	fs.Var(&f.composerFiles, "composer-file", "supply a local composer.json/composer.lock/installed.json to build the dependency inventory (deep mode; repeatable)")
 	fs.Var(&f.faviconCatalogs, "favicon-catalog", "favicon-hash → product catalogue file or URL (repeatable)")
 	fs.Var(&f.allow, "allow", "allow-list pattern (host, CIDR or *.domain); keep only matching targets (repeatable)")
 	fs.Var(&f.block, "block", "block-list pattern (host, CIDR or *.domain); drop matching targets (repeatable)")

@@ -152,6 +152,14 @@ async function runScan() {
     return;
   }
 
+  let composerFiles = [];
+  try {
+    composerFiles = await readComposerUploads();
+  } catch (e) {
+    setStatus("Could not read Composer file: " + e.message, true);
+    return;
+  }
+
   const body = {
     targets_text: targets,
     ports: $("ports").value.trim(),
@@ -170,6 +178,7 @@ async function runScan() {
     block: splitList($("block").value),
     resolve: splitList($("resolve").value),
     sni: $("sni").value.trim(),
+    composer_files: composerFiles,
   };
 
   scanBtn.disabled = true;
@@ -347,6 +356,24 @@ function logLine(text) {
 function setStatus(msg, isError) {
   statusEl.textContent = msg;
   statusEl.classList.toggle("error", !!isError);
+}
+
+// readComposerUploads reads any selected Composer files in the browser and
+// returns them as [{name, content}] for the scan request. Empty when none are
+// chosen.
+function readComposerUploads() {
+  const input = $("composer-files");
+  if (!input || !input.files || input.files.length === 0) return Promise.resolve([]);
+  const reads = Array.from(input.files).map(
+    (file) =>
+      new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve({ name: file.name, content: String(r.result || "") });
+        r.onerror = () => reject(new Error(file.name));
+        r.readAsText(file);
+      })
+  );
+  return Promise.all(reads);
 }
 
 // scanRender tracks the live render of the current scan so results stream in
@@ -880,6 +907,7 @@ function renderService(svc, target) {
       card.appendChild(chips("phpinfo() observations", php.phpinfo.observations));
     }
     if (php.vulnerabilities && php.vulnerabilities.length) card.appendChild(renderVulns(php.vulnerabilities));
+    if (php.composer) card.appendChild(renderComposer(php.composer));
     if (php.evidence && php.evidence.length) card.appendChild(renderEvidence(php.evidence));
   }
 
@@ -918,6 +946,50 @@ function renderVulns(vulns) {
   }
   d.appendChild(ul);
   d.appendChild(el("p", "note", "Correlated from the detected version only — verify against the live service."));
+  return d;
+}
+
+// renderComposer draws the Composer dependency inventory: the declared PHP
+// requirement (kept distinct from the runtime version), each package with its
+// class and version, and any version-correlated advisory leads.
+function renderComposer(inv) {
+  const d = el("details");
+  d.open = true;
+  const pkgs = inv.packages || [];
+  let title = `Composer packages (${pkgs.length})`;
+  if (inv.truncated) title += " — truncated";
+  d.appendChild(el("summary", null, title));
+  if (inv.php_constraint) {
+    d.appendChild(el("p", "note", "php requirement: " + inv.php_constraint + " (declared — not the detected runtime version)"));
+  }
+  const ul = el("ul", "complist");
+  for (const p of pkgs) {
+    const li = el("li");
+    const cls = el("span", "pkgclass c-" + (p.class || ""), p.class || "");
+    cls.title = "required = declared in composer.json; locked = composer.lock; installed = vendor/composer/installed.json.";
+    li.appendChild(cls);
+    li.appendChild(document.createTextNode(" " + p.name + (p.version ? " " + p.version : "")));
+    const bits = [];
+    if (p.constraint) bits.push("require " + p.constraint);
+    if (p.dev) bits.push("dev");
+    if (bits.length) li.appendChild(el("span", "note", " (" + bits.join(", ") + ")"));
+    if (p.advisories && p.advisories.length) {
+      const al = el("ul", "vulnlist");
+      for (const a of p.advisories) {
+        const ali = el("li");
+        const sev = el("span", "sev " + (a.severity || "low"), (a.severity || "").toUpperCase());
+        sev.title = "Severity of this version-correlated package lead (informational, not a confirmed finding).";
+        ali.appendChild(sev);
+        ali.appendChild(document.createTextNode(a.id + " — " + a.title));
+        ali.appendChild(el("div", "note", "affects " + a.affected_versions));
+        al.appendChild(ali);
+      }
+      li.appendChild(al);
+    }
+    ul.appendChild(li);
+  }
+  d.appendChild(ul);
+  d.appendChild(el("p", "note", "Dependency inventory parsed from exposed or supplied Composer files. Advisory leads are version-range correlations — informational, verify against the live service."));
   return d;
 }
 

@@ -284,6 +284,58 @@ func renderPHP(d *document, det *php.Detection) {
 		}
 		d.text("NOTE: vulnerability leads are correlated from the detected version only; confirm each against the live service and configuration.")
 	}
+
+	renderComposer(d, det.Composer)
+}
+
+// renderComposer prints the Composer dependency inventory (partial SBOM): the
+// declared PHP requirement kept separate from the runtime version, each package
+// with its class and version, and any version-correlated package advisory leads.
+func renderComposer(d *document, inv *php.ComposerInventory) {
+	if inv == nil {
+		return
+	}
+	d.spacer()
+	label := fmt.Sprintf("%d package(s)", len(inv.Packages))
+	if inv.Truncated {
+		label += " (truncated)"
+	}
+	d.kv("Composer inventory", label)
+	if inv.PHPConstraint != "" {
+		d.kv("  php requirement", inv.PHPConstraint+" (declared; not the runtime version)")
+	}
+	if adv := inv.AdvisoryCount(); adv > 0 {
+		d.kv("  advisory leads", fmt.Sprintf("%d", adv))
+	}
+	const maxShown = 100
+	shown, more := inv.Packages, 0
+	if len(shown) > maxShown {
+		more = len(shown) - maxShown
+		shown = shown[:maxShown]
+	}
+	for _, p := range shown {
+		line := p.Name
+		if p.Version != "" {
+			line += " " + p.Version
+		}
+		line += " [" + p.Class + "]"
+		if p.Constraint != "" {
+			line += " (require " + p.Constraint + ")"
+		}
+		if p.Dev {
+			line += " (dev)"
+		}
+		d.bullet(line)
+		for _, a := range p.Advisories {
+			d.bullet(fmt.Sprintf("    %s [%s] %s — affects %s", a.ID, strings.ToUpper(a.Severity), a.Title, a.AffectedVersions))
+		}
+	}
+	if more > 0 {
+		d.bullet(fmt.Sprintf("… +%d more package(s) — see the JSON/XML output for the full inventory", more))
+	}
+	if inv.AdvisoryCount() > 0 {
+		d.text("NOTE: Composer package advisory leads are version-range correlations against the inventory; confirm each against the live service.")
+	}
 }
 
 func renderSecurityTxt(d *document, st *securitytxt.SecurityTxt) {

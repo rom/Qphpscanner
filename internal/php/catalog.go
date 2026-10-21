@@ -88,7 +88,11 @@ type VulnFeed struct {
 	Generated string                 `json:"generated,omitempty"`
 	PHP       []FeedEntry            `json:"php,omitempty"`
 	CMS       map[string][]FeedEntry `json:"cms,omitempty"`
-	EOL       map[string]string      `json:"eol,omitempty"`
+	// Packages keys advisories by Composer package name (vendor/package,
+	// lowercase) — the OSV "Packagist" dimension, correlated against the
+	// dependency inventory rather than a detected core version.
+	Packages map[string][]FeedEntry `json:"packages,omitempty"`
+	EOL      map[string]string      `json:"eol,omitempty"`
 }
 
 // Catalog holds the active vulnerability and end-of-life data: the built-in
@@ -96,6 +100,7 @@ type VulnFeed struct {
 type Catalog struct {
 	php []FeedEntry
 	cms map[string][]FeedEntry
+	pkg map[string][]FeedEntry
 	eol map[string]string
 }
 
@@ -104,10 +109,14 @@ func DefaultCatalog() *Catalog {
 	c := &Catalog{
 		php: append([]FeedEntry(nil), builtinPHP...),
 		cms: map[string][]FeedEntry{},
+		pkg: map[string][]FeedEntry{},
 		eol: map[string]string{},
 	}
 	for k, v := range builtinCMS {
 		c.cms[strings.ToLower(k)] = append([]FeedEntry(nil), v...)
+	}
+	for k, v := range builtinPackages {
+		c.pkg[strings.ToLower(k)] = append([]FeedEntry(nil), v...)
 	}
 	for k, v := range builtinEOL {
 		c.eol[k] = v
@@ -128,6 +137,13 @@ func (c *Catalog) Merge(f *VulnFeed) {
 	for k, entries := range f.CMS {
 		key := strings.ToLower(k)
 		c.cms[key] = append(c.cms[key], entries...)
+	}
+	if c.pkg == nil {
+		c.pkg = map[string][]FeedEntry{}
+	}
+	for k, entries := range f.Packages {
+		key := strings.ToLower(k)
+		c.pkg[key] = append(c.pkg[key], entries...)
 	}
 	if c.eol == nil {
 		c.eol = map[string]string{}
@@ -174,6 +190,23 @@ func (c *Catalog) CorrelateCMS(framework, version string) []Vulnerability {
 		return nil
 	}
 	return matchEntries(entries, version, framework+" version-correlation")
+}
+
+// CorrelatePackage returns advisory leads for a Composer package at a concrete
+// version. Matching is version-range based and the leads are informational,
+// exactly like the version-correlated vulnerability leads elsewhere.
+func (c *Catalog) CorrelatePackage(name, version string) []Vulnerability {
+	if name == "" || version == "" {
+		return nil
+	}
+	entries, ok := c.pkg[strings.ToLower(strings.TrimSpace(name))]
+	if !ok {
+		return nil
+	}
+	if _, _, _, ok := parseVersion(version); !ok {
+		return nil
+	}
+	return matchEntries(entries, version, "composer-package "+name+" version-correlation")
 }
 
 func matchEntries(entries []FeedEntry, version, basisKind string) []Vulnerability {

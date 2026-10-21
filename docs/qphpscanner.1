@@ -181,7 +181,15 @@ Repeatable; applied after the allow list.
 .BI \-\-vuln\-feed " file|url"
 Merge an external vulnerability feed (repeatable). The native
 qphpscanner-vuln-feed schema, OSV records (single or array) and CSAF 2.0
-advisories are auto-detected.
+advisories are auto-detected. OSV \fBPackagist\fR records are ingested as
+package-level advisories and correlated against the Composer inventory.
+.TP
+.BI \-\-composer\-file " file"
+Supply a local \fIcomposer.json\fR, \fIcomposer.lock\fR or
+\fIvendor/composer/installed.json\fR (repeatable) to build the dependency
+inventory for a target whose Composer files are not web-exposed. Deep mode
+only. The declared \fBphp\fR platform requirement is kept distinct from the
+detected runtime version.
 .TP
 .BI \-\-fail\-on " level"
 Exit with status 2 if a finding meets \fIlevel\fR: low, medium, high,

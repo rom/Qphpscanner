@@ -8,6 +8,27 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Composer dependency inventory (partial SBOM):** when a project's Composer
+  metadata is web-exposed or supplied, qphpscanner parses `composer.json`
+  (declared `require` / `require-dev` constraints), `composer.lock` (resolved,
+  *locked* versions) and `vendor/composer/installed.json` (concrete *installed*
+  versions) into a classified package inventory (`required` / `locked` /
+  `installed`), with source references where present. The declared `php`
+  platform requirement is captured separately and **never** conflated with the
+  detected runtime version. Shown in JSON/XML output, the text/HTML/PDF/RTF
+  reports (and summarised in CSV/SARIF) and the web result card ("Composer
+  packages"). Bounded (package and size caps) and backward-compatible
+  (`composer` is omitted when absent).
+- **Package-level advisories:** a package-advisory dimension (name + affected
+  version ranges) fed by built-in data and external feeds. OSV **Packagist**
+  records (`--vuln-feed`, OSV batch-compatible) are ingested as package
+  advisories and correlated against the inventory's resolved versions. Matches
+  are version-range-based, informational leads — framed exactly like the
+  existing vulnerability leads, never confirmed findings.
+- **Operator-supplied Composer files:** `--composer-file FILE` (repeatable, YAML
+  `composer_files:`, and a web upload) builds the inventory from provided files
+  for a target whose Composer files are not web-exposed. Full CLI / YAML / web
+  parity.
 - **Connection pinning + origin comparison:** `--resolve HOST:PORT:ADDR`
   (curl-style) dials a specific address while keeping the URL host for the Host
   header and TLS SNI, and `--sni NAME` overrides the TLS SNI independently — so
