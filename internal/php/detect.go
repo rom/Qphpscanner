@@ -154,7 +154,7 @@ func Analyze(in Input) *Detection {
 			})
 		}
 		if resp.Status == 200 {
-			detectStatusDashboards(url, body, addEv, addExt, addFw)
+			detectStatusDashboards(url, body, addEv, addExt, addFw, addMod)
 		}
 	}
 
@@ -172,6 +172,23 @@ func Analyze(in Input) *Detection {
 	// --- Favicon fingerprint (deep mode) ------------------------------------
 	if in.Favicon != nil && in.Favicon.Err == "" && in.Favicon.Status == 200 && len(in.Favicon.Body) > 0 {
 		d.FaviconHash = faviconHash(in.Favicon.Body)
+		if entry, ok := faviconLookup(d.FaviconHash); ok {
+			w := 40
+			if !entry.PHP {
+				w = 20
+			}
+			detail := "favicon hash matches " + entry.Product
+			if entry.Note != "" {
+				detail += " (" + entry.Note + ")"
+			}
+			addEv(Evidence{
+				Signal: "favicon.catalog", Source: in.Favicon.FinalURL, Weight: w,
+				Detail: detail, Data: d.FaviconHash + " → " + entry.Product,
+				Where: "site favicon", How: "mmh3 favicon-hash catalogue match",
+				Pattern: d.FaviconHash, Snippet: entry.Product,
+			})
+			addFw(entry.Framework)
+		}
 	}
 
 	// --- CMS / framework versions -------------------------------------------
@@ -441,6 +458,8 @@ var addonNames = map[string]bool{
 	"Polylang":              true,
 	"K2":                    true,
 	"LiteSpeed Cache":       true,
+	"Laravel Telescope":     true,
+	"Laravel Horizon":       true,
 }
 
 // partitionAddons moves addon technologies out of frameworks into addons.
@@ -480,7 +499,7 @@ func inferSAPI(root *probe.Response, pathInfo bool) string {
 
 // detectStatusDashboards recognises exposed status/management pages that reveal
 // PHP extensions (OPcache, APCu) or PHP tools (Adminer, phpMyAdmin, Composer).
-func detectStatusDashboards(url, body string, addEv func(Evidence), addExt, addFw func(string)) {
+func detectStatusDashboards(url, body string, addEv func(Evidence), addExt, addFw, addMod func(string)) {
 	lu := strings.ToLower(url)
 
 	if contains(body, "opcache_get_status") ||
@@ -503,6 +522,41 @@ func detectStatusDashboards(url, body string, addEv func(Evidence), addExt, addF
 	}
 	if strings.Contains(lu, "installed.json") && (strings.Contains(body, "\"packages\"") || strings.Contains(body, "\"name\"")) {
 		addEv(Evidence{Signal: "diag.composer-installed", Source: url, Weight: 45, Detail: "Composer installed packages exposed (vendor/composer/installed.json)"})
+	}
+
+	// Exposed dotenv file: a strong PHP/Laravel signal and a notable leak.
+	if strings.HasSuffix(lu, "/.env") && (containsFold(body, "APP_KEY=") || containsFold(body, "APP_ENV=") || containsFold(body, "DB_CONNECTION=") || containsFold(body, "DB_PASSWORD=")) {
+		addEv(Evidence{Signal: "diag.dotenv", Source: url, Weight: 55, Detail: "Exposed .env configuration file (secrets may be readable)"})
+		if containsFold(body, "APP_KEY=") || containsFold(body, "DB_CONNECTION=") {
+			addFw("Laravel")
+		}
+	}
+	// Symfony dev front controller / web profiler.
+	if (strings.Contains(lu, "app_dev.php") || strings.Contains(lu, "/_profiler")) &&
+		(containsFold(body, "sf-toolbar") || containsFold(body, "Symfony Profiler") || containsFold(body, "WebProfilerBundle") || containsFold(body, "Symfony\\")) {
+		addFw("Symfony")
+		addEv(Evidence{Signal: "diag.symfony-profiler", Source: url, Weight: 45, Detail: "Symfony dev front controller / web profiler exposed (debug mode)"})
+	}
+	// Laravel Telescope / Horizon dashboards.
+	if strings.Contains(lu, "telescope") && (containsFold(body, "Telescope") || containsFold(body, "Laravel")) {
+		addFw("Laravel")
+		addFw("Laravel Telescope")
+		addEv(Evidence{Signal: "diag.telescope", Source: url, Weight: 45, Detail: "Laravel Telescope debug dashboard exposed"})
+	}
+	if strings.Contains(lu, "horizon") && (containsFold(body, "Horizon") || containsFold(body, "Laravel")) {
+		addFw("Laravel")
+		addFw("Laravel Horizon")
+		addEv(Evidence{Signal: "diag.horizon", Source: url, Weight: 40, Detail: "Laravel Horizon queue dashboard exposed"})
+	}
+	// php-fpm status page.
+	if containsFold(body, "pool:") && containsFold(body, "accepted conn") {
+		addMod("php-fpm")
+		addEv(Evidence{Signal: "diag.fpm-status", Source: url, Weight: 40, Detail: "PHP-FPM status page exposed"})
+	}
+	// Nextcloud / ownCloud status.php.
+	if strings.HasSuffix(lu, "status.php") && containsFold(body, "\"installed\"") && containsFold(body, "\"version\"") {
+		addFw("Nextcloud/ownCloud")
+		addEv(Evidence{Signal: "diag.nextcloud-status", Source: url, Weight: 40, Detail: "Nextcloud/ownCloud status.php exposed"})
 	}
 }
 
@@ -573,6 +627,8 @@ func provenanceDefaults(signal string) (where, how string) {
 		return "response body / version file", "CMS version extraction"
 	case strings.HasPrefix(signal, "url."):
 		return "request URL", "URL inspection"
+	case strings.HasPrefix(signal, "favicon."):
+		return "site favicon", "mmh3 favicon-hash catalogue match"
 	case strings.HasPrefix(signal, "body."):
 		return "response body", "content match"
 	default:
