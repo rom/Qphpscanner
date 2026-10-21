@@ -173,6 +173,42 @@ func TestRunSignaturePack(t *testing.T) {
 	}
 }
 
+func TestRunRecordAndReplayCorpus(t *testing.T) {
+	ts := phpServer()
+	defer ts.Close()
+	dir := t.TempDir()
+	corpusPath := filepath.Join(dir, "corpus.json")
+
+	// Record a corpus during a live scan.
+	if err := run([]string{"--quiet", "--mode", "deep", "--record-corpus", corpusPath, ts.URL}); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	data, err := os.ReadFile(corpusPath)
+	if err != nil {
+		t.Fatalf("corpus not written: %v", err)
+	}
+	if !strings.Contains(string(data), "qphpscanner-replay-corpus/1") {
+		t.Fatalf("corpus missing schema: %s", data)
+	}
+
+	// Replay it offline and confirm the PHP version is reproduced.
+	out := filepath.Join(dir, "replay.json")
+	if err := run([]string{"--quiet", "--replay-corpus", corpusPath, "--format", "json", "--out", out}); err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	replayed, _ := os.ReadFile(out)
+	if !strings.Contains(string(replayed), "8.2.0") {
+		t.Fatalf("replay output should reproduce the PHP version:\n%s", replayed)
+	}
+
+	// A malformed corpus is a hard error.
+	bad := filepath.Join(dir, "bad.json")
+	_ = os.WriteFile(bad, []byte(`{"schema":"other/9"}`), 0o644)
+	if err := run([]string{"--quiet", "--replay-corpus", bad}); err == nil {
+		t.Fatal("expected error for a bad-schema corpus")
+	}
+}
+
 func TestRunBadVulnFeed(t *testing.T) {
 	ts := phpServer()
 	defer ts.Close()

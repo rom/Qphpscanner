@@ -497,6 +497,37 @@ DECISION  192.0.2.10:443  https://192.0.2.10:443/
 
 Both flags can be combined, and work with any scan mode and target type.
 
+## Record & replay (offline regression harness)
+
+A scan can be captured once and replayed many times with no network, so a real
+target becomes a repeatable test case:
+
+```sh
+qphpscanner --mode deep --record-corpus site.corpus.json example.com   # capture
+qphpscanner --replay-corpus site.corpus.json --format json             # re-run offline
+```
+
+`--record-corpus FILE` writes a JSON **corpus** (schema
+`qphpscanner-replay-corpus/1`) holding, per service, the exact responses that
+were fed to analysis (root, the easter-egg/favicon/PATH_INFO probes, the
+soft-404 control and every deep-discovery probe). `--replay-corpus FILE` loads
+it and runs those responses back through the detection pipeline — no network,
+no targets — emitting a scan result exactly as a live run would, so the PHP
+verdict, version, evidence and vulnerability leads are reproduced. It honours
+`--vuln-feed`, `--signature-pack`, `--format`/`--report`, `--diff` and
+`--fail-on`, so you can confirm a detection or catalogue change behaves the same
+against a fixed input, or diff two builds against one corpus.
+
+The corpus is **sanitised on capture**: `Set-Cookie` values, parsed cookie
+values and credential headers (`Authorization`, `Proxy-Authorization`,
+`X-Api-Key`, `X-Auth-Token`) are redacted, while the cookie *names* and
+attributes that detection keys on are kept. Response bodies are stored verbatim
+— they are the fingerprinting material — and round-trip byte-exact (base64), so
+binary signals such as the favicon hash replay faithfully; review a corpus
+before sharing it. Replay reproduces the PHP detection and the HTTP summary;
+network-only facets of a live scan (port state, service banners, security.txt,
+web-server/reverse-proxy identification) are not part of the corpus.
+
 ## Exit status
 
 - `0` — the scan completed (regardless of what was found).

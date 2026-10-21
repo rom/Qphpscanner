@@ -34,6 +34,8 @@ internal/
                      a Recorder hook feeds every exchange to the audit trail
   pcap               dependency-free libpcap writer: reconstructs HTTP exchanges
                      as raw-IPv4 TCP conversations with valid checksums
+  corpus             sanitised record/replay fixture of a scan's detection inputs
+                     (leaf: depends only on probe); drives offline replay
   php                PHP detection, fingerprinting, vuln correlation (the core)
                      — catalog.go (data-driven vuln/EOL catalogue + feed loader),
                      feeds_import.go (OSV + CSAF importers), vulndb.go (built-in
@@ -47,7 +49,8 @@ internal/
   scanner            orchestration: expand → connect → probe → analyse → aggregate;
                      a host-level scheduler (HostConcurrency) over a global
                      service-concurrency pool; enrich.go (DNS, jitter, per-host
-                     gate), checkpoint.go (resume), audit.go (PCAP + decision log)
+                     gate), checkpoint.go (resume), audit.go (PCAP + decision log),
+                     replay.go (reconstruct a ScanResult from a recorded corpus)
   report             rendering: text, JSON, XML, RTF, PDF (from one doc model)
   config             YAML-subset parser and typed configuration
   web                embedded single-page GUI + JSON API over the scanner

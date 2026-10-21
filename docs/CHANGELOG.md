@@ -8,6 +8,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Offline record & replay (regression harness):** `--record-corpus FILE`
+  saves a sanitised fixture of a scan's detection inputs — the exact responses
+  fed to analysis — and `--replay-corpus FILE` runs that corpus back through the
+  detection pipeline with no network and no targets, reproducing the PHP
+  verdict, version, evidence and vulnerability leads. This turns a real scan
+  into a repeatable test case (e.g. to confirm a detection change behaves the
+  same, or to diff two code versions against one captured corpus). The corpus is
+  sanitised on capture: session-cookie values and credential headers are
+  redacted while the cookie names and attributes detection relies on are kept;
+  response bodies (the fingerprinting material) are stored verbatim, so a corpus
+  should still be reviewed before sharing. Bodies round-trip byte-exact
+  (base64), so the favicon hash and other binary signals replay faithfully.
 - **Versioned signature packs:** the built-in detection catalogues can be
   extended at run time with an external **signature pack** — a JSON document
   (schema `qphpscanner-signature-pack/1`) adding response-header, cookie-name
