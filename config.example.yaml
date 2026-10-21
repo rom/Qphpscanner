@@ -86,6 +86,9 @@ host_concurrency: 0
 jitter: 0s
 # Extra attempts on a transient network error.
 retries: 0
+# Cap deep-mode probes per service; optional app-discovery probes stop when
+# spent (0 = no cap). Deep probing is adaptive and honours 429/503 back-off.
+request_budget: 0
 
 # --- Enrichment ---------------------------------------------------------------
 # Add forward and reverse DNS for each host.

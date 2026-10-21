@@ -198,6 +198,7 @@ type scanRequest struct {
 	ResolveDNS      bool     `json:"resolve_dns"`
 	Banners         bool     `json:"banners"`
 	HostConcurrency int      `json:"host_concurrency"`
+	RequestBudget   int      `json:"request_budget"`
 	Allow           []string `json:"allow"`
 	Block           []string `json:"block"`
 	Resolve         []string `json:"resolve"`        // "host:port:addr" rules
@@ -239,6 +240,7 @@ func (s *Server) buildOptions(req scanRequest) (scanner.Options, []string, error
 		ResolveDNS:      req.ResolveDNS,
 		GrabBanners:     req.Banners,
 		HostConcurrency: req.HostConcurrency,
+		RequestBudget:   req.RequestBudget,
 		Allowlist:       cleanTargets(req.Allow),
 		Blocklist:       cleanTargets(req.Block),
 		SNIServerName:   strings.TrimSpace(req.SNI),

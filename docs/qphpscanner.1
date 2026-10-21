@@ -134,6 +134,13 @@ Sleep a random time up to this before each service probe.
 .BI \-\-retries " n"
 Retry transient network failures n times with backoff.
 .TP
+.BI \-\-request\-budget " n"
+Cap deep-mode probes per service. Core identification probes always run;
+optional application-discovery probes stop once the budget is spent (0 = no
+cap). Deep probing is adaptive: an application's endpoints are only requested
+after the base responses show evidence of that application, and a host
+returning 429/503 skips the optional probes.
+.TP
 .BI \-\-header " 'Name: value'"
 Add a request header (repeatable).
 .TP

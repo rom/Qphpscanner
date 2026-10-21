@@ -82,6 +82,10 @@ type Options struct {
 	Jitter time.Duration
 	// Retries is the number of extra attempts on a transient network error.
 	Retries int
+	// RequestBudget caps the number of deep-mode probes issued per service
+	// (0 = no cap). Core identification probes always run; optional
+	// app-discovery probes stop once the budget is spent.
+	RequestBudget int
 
 	// --- Enrichment ---
 	// ResolveDNS adds forward and reverse DNS for each host.
@@ -607,12 +611,10 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 	}
 	if in.Deep {
 		in.Extra = map[string]*probe.Response{}
-		for _, p := range php.DeepProbePaths() {
-			if p == "/" {
-				continue
-			}
-			u := base + ensureLeadingSlash(p)
-			in.Extra[u] = fetcher.Get(ctx, u)
+		spent := 0 // probes issued in this deep pass (for the request budget)
+		get := func(u string) *probe.Response {
+			spent++
+			return fetcher.Get(ctx, u)
 		}
 		// The 404 page can leak a PHP version via an Apache signature, and also
 		// serves as the soft-404 baseline for catch-all detection.
@@ -620,15 +622,84 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 			in.Extra[base+"/qphpscanner_probe_404"] = notFound
 			in.Control = notFound
 		}
-		in.EasterCredits = fetcher.Get(ctx, base+"/"+php.EasterEggCredits)
-		in.EasterLogo = fetcher.Get(ctx, base+"/"+php.EasterEggLogo)
-		in.Favicon = fetcher.Get(ctx, base+php.FaviconPath)
-		in.PathInfo = fetcher.Get(ctx, base+php.PathInfoProbe)
+		// Phase 1 — core PHP signals, always collected.
+		in.EasterCredits = get(base + "/" + php.EasterEggCredits)
+		in.EasterLogo = get(base + "/" + php.EasterEggLogo)
+		in.Favicon = get(base + php.FaviconPath)
+		in.PathInfo = get(base + php.PathInfoProbe)
+
+		// If the host is rate-limiting (429/503, honouring any Retry-After by
+		// backing off rather than hammering), skip the optional discovery probes.
+		if rateLimited(root, notFound, in.EasterCredits, in.Favicon, in.PathInfo) {
+			res.DiscoveryLimited = "rate-limited"
+			res.PHP = php.Analyze(in)
+			res.DurationMS = time.Since(start).Milliseconds()
+			return res
+		}
+
+		// Phase 2 — adaptive discovery. A first analysis of the core responses
+		// decides which app-specific probe groups are worth issuing, so an app's
+		// endpoints are only requested once something hints at that app.
+		phase1 := php.Analyze(in)
+		var paths []string
+		if phpPlausible(phase1, root) {
+			paths = append(paths, php.GenericDeepProbePaths()...)
+		}
+		for _, g := range php.ConditionalProbeGroups() {
+			if g.Trigger(phase1) {
+				paths = append(paths, g.Paths...)
+			}
+		}
+		for _, p := range paths {
+			if opts.RequestBudget > 0 && spent >= opts.RequestBudget {
+				res.DiscoveryLimited = "budget"
+				break
+			}
+			u := base + ensureLeadingSlash(p)
+			if _, ok := in.Extra[u]; ok {
+				continue
+			}
+			in.Extra[u] = get(u)
+		}
+		res.PHP = php.Analyze(in)
+		res.DurationMS = time.Since(start).Milliseconds()
+		return res
 	}
 
 	res.PHP = php.Analyze(in)
 	res.DurationMS = time.Since(start).Milliseconds()
 	return res
+}
+
+// rateLimited reports whether any core response indicates the host is throttling
+// (HTTP 429 or 503). Optional discovery probes are skipped when it is, to honour
+// the back-off the server is asking for.
+func rateLimited(resps ...*probe.Response) bool {
+	for _, r := range resps {
+		if r == nil {
+			continue
+		}
+		if r.Status == 429 || r.Status == 503 {
+			return true
+		}
+	}
+	return false
+}
+
+// phpPlausible reports whether a service plausibly runs PHP, so generic PHP
+// discovery probes are worth issuing. It defaults to true (PHP can hide behind
+// a plain page) unless a clearly non-PHP runtime is advertised.
+func phpPlausible(d *php.Detection, root *probe.Response) bool {
+	if d != nil && d.IsPHP {
+		return true
+	}
+	hay := strings.ToLower(root.HeaderGet("X-Powered-By") + " " + root.HeaderGet("Server"))
+	for _, nonPHP := range []string{"asp.net", "express", "kestrel", "werkzeug", "gunicorn", "coyote", "jetty", "tomcat", "phusion passenger"} {
+		if strings.Contains(hay, nonPHP) {
+			return false
+		}
+	}
+	return true
 }
 
 // serverStatusPaths are read-only endpoints that often leak the web server,

@@ -8,6 +8,16 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Adaptive deep-mode discovery:** deep probing is now evidence-driven — after
+  the base/core responses, an application's endpoints (WordPress, Joomla,
+  Drupal, Laravel/Symfony, Magento) are requested only once that application is
+  indicated, and generic PHP discovery is skipped against a clearly non-PHP
+  runtime. A per-service request budget (`--request-budget`, config
+  `request_budget`, web field) caps optional probes, and a host returning
+  429/503 skips them entirely (back-off). When discovery is cut short the result
+  records why (`discovery_limited`: `budget` / `rate-limited`). Full
+  CLI / YAML / web parity.
+
 - **Composer dependency inventory & package advisories:** when a
   `composer.json` / `composer.lock` / `vendor/composer/installed.json` is
   web-exposed (or supplied with `--composer-file`, config `composer_files`, or

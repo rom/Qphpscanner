@@ -91,7 +91,10 @@
             <label for="hostconc">Host concurrency</label>
             <input id="hostconc" type="number" min="0" max="500" value="0" title="Maximum distinct hosts scanned at once (0 = no host-level cap)">
           </div>
-          <div></div>
+          <div>
+            <label for="reqbudget">Request budget</label>
+            <input id="reqbudget" type="number" min="0" max="500" value="0" title="Cap deep-mode probes per service; optional app-discovery probes stop when spent (0 = no cap)">
+          </div>
         </div>
 
         <details class="advanced">

@@ -110,6 +110,15 @@ self-signed or otherwise invalid certificates.
 
 All probes are GET requests; nothing is submitted and nothing is exploited.
 
+Deep discovery is **adaptive**: after the base and core responses, an
+application's probe paths (WordPress, Joomla, Drupal, Laravel/Symfony, Magento)
+are requested only once that application is indicated, and generic PHP
+discovery is skipped against a clearly non-PHP runtime. `--request-budget N`
+caps the optional probes per service (0 = no cap), and a host returning
+`429`/`503` makes the optional probes back off entirely. When discovery stops
+early the result's `discovery_limited` field records why (`budget` or
+`rate-limited`).
+
 ## Output formats
 
 `--format` selects the machine-readable scan output, written to stdout or to
