@@ -121,6 +121,11 @@ details.advanced > summary { cursor: pointer; font-size: .82rem; color: var(--ac
 .diff-added { color: var(--green); }
 .diff-removed { color: var(--red); }
 .diff-note { color: var(--accent-2); }
+.appl { margin-left: 8px; padding: 0 6px; border-radius: 6px; font-size: .68rem; font-weight: 600; vertical-align: middle; }
+.appl-contradicted { background: rgba(100,116,139,.25); color: var(--text-dim); }
+.appl-observed { background: rgba(255,92,108,.2); color: var(--red); }
+.prereq-contradicted { color: var(--text-dim); }
+.prereq-observed { color: var(--red); }
 .svc-dns { font-size: .76rem; color: var(--text-dim); font-family: ui-monospace, Menlo, Consolas, monospace; margin: 2px 0 0; word-break: break-all; }
 
 /* results sub-tabs (Results / PHP / Failures) */

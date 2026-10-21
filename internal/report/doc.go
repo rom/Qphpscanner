@@ -219,6 +219,9 @@ func renderPHP(d *document, det *php.Detection) {
 		}
 		d.kv("Version", det.Version+src)
 	}
+	if det.VersionConflict {
+		d.kv("Version conflict", "sources disagree (possible multiple backends / cache / apps)")
+	}
 	if det.EOLDetail != "" {
 		label := det.EOLDetail
 		if det.EndOfLife {
@@ -279,8 +282,17 @@ func renderPHP(d *document, det *php.Detection) {
 	if len(det.Vulnerabilities) > 0 {
 		d.text(fmt.Sprintf("Version-correlated vulnerability leads (%d):", len(det.Vulnerabilities)))
 		for _, v := range det.Vulnerabilities {
-			d.bullet(fmt.Sprintf("%s [%s] %s", v.ID, strings.ToUpper(v.Severity), v.Title))
+			suffix := ""
+			if v.Applicability == "contradicted" {
+				suffix = " (likely N/A here)"
+			} else if v.Applicability == "observed" {
+				suffix = " (preconditions met)"
+			}
+			d.bullet(fmt.Sprintf("%s [%s] %s%s", v.ID, strings.ToUpper(v.Severity), v.Title, suffix))
 			d.bullet(fmt.Sprintf("    affects %s — %s", v.AffectedVersions, v.MatchBasis))
+			for _, p := range v.Prerequisites {
+				d.bullet(fmt.Sprintf("    precondition (%s): %s", p.State, p.Detail))
+			}
 		}
 		d.text("NOTE: vulnerability leads are correlated from the detected version only; confirm each against the live service and configuration.")
 	}

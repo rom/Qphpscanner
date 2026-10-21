@@ -76,6 +76,28 @@ type Vulnerability struct {
 	Reference        string `json:"reference,omitempty"`
 	// MatchBasis explains how the correlation was made.
 	MatchBasis string `json:"match_basis"`
+	// Prerequisites qualifies the lead by resolving each structured condition
+	// (required SAPI/OS/extension/config) against what the scan observed.
+	Prerequisites []PrereqResult `json:"prerequisites,omitempty"`
+	// Applicability summarises the prerequisites: "observed" (conditions hold),
+	// "contradicted" (evidence a condition does NOT hold — likely not applicable
+	// here), or "" (no structured prerequisites, or all unknown: a plain lead).
+	Applicability string `json:"applicability,omitempty"`
+}
+
+// PrereqResult is one resolved prerequisite for a vulnerability lead.
+type PrereqResult struct {
+	Detail string `json:"detail"`
+	State  string `json:"state"` // observed | contradicted | unknown
+}
+
+// VersionObservation is one version value seen during detection, with where it
+// came from. The raw string is kept verbatim (including any distro/backport
+// suffix such as "7.4.33-1+deb11u3").
+type VersionObservation struct {
+	Version string `json:"version" xml:"version"`
+	Source  string `json:"source" xml:"source"`
+	Rank    int    `json:"rank,omitempty" xml:"rank,omitempty"`
 }
 
 // Detection is the full PHP assessment of one service.
@@ -85,10 +107,16 @@ type Detection struct {
 	Confidence int     `json:"confidence"` // 0-100
 
 	Variant       string `json:"variant,omitempty"`        // PHP, HHVM, ...
-	Version       string `json:"version,omitempty"`        // e.g. 7.4.33
-	VersionSource string `json:"version_source,omitempty"` // how the version was learned
+	Version       string `json:"version,omitempty"`        // best single value, e.g. 7.4.33
+	VersionSource string `json:"version_source,omitempty"` // how the best version was learned
 	EndOfLife     bool   `json:"end_of_life,omitempty"`
 	EOLDetail     string `json:"eol_detail,omitempty"`
+	// VersionObservations lists every version seen with its source; Version is
+	// the highest-ranked of these.
+	VersionObservations []VersionObservation `json:"version_observations,omitempty" xml:"version_observations>observation,omitempty"`
+	// VersionConflict is set when observations disagree at the major.minor level
+	// (which can mean different backend nodes, a cached reply, or two apps).
+	VersionConflict bool `json:"version_conflict,omitempty" xml:"version_conflict,omitempty"`
 
 	Frameworks        []string          `json:"frameworks,omitempty"`
 	FrameworkVersions map[string]string `json:"framework_versions,omitempty" xml:"-"`

@@ -330,6 +330,17 @@ Three formats are auto-detected:
 PHP-core advisories feed the PHP correlation; everything else is keyed by a
 normalised framework/package name (drupal, wordpress, laravel, …).
 
+Leads are **qualified, never dropped**. Detection keeps every version
+observation with its source and flags a *version conflict* when sources
+disagree at the major.minor level (possible multiple backends, a cache or two
+apps); distro/backport suffixes are kept verbatim. A lead may carry
+**prerequisites** (required SAPI / OS / extension / ini directive) which are
+resolved against the scan's own evidence to *observed*, *contradicted* or
+*unknown*: a contradicted precondition marks the lead "likely N/A here" (for
+example a `php-cgi`-only CVE on an observed `apache2handler` SAPI, or the
+php2shell CVEs when `session.upload_progress.enabled` is Off). This qualifies
+the lead's applicability — it is not an assertion that the service is safe.
+
 ## Favicon catalogue
 
 In deep mode the site favicon's mmh3 hash is matched against a built-in

@@ -8,6 +8,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Version-uncertainty model & vulnerability prerequisites:** detection now
+  keeps every version observation with its source (header, phpinfo, Apache
+  signature, …) and flags a **version conflict** when sources disagree at the
+  major.minor level (possible multiple backends, a cache, or two apps).
+  Distro/backport suffixes (e.g. `7.4.33-1+deb11u3`) are preserved verbatim.
+  Vulnerability leads can now carry structured **prerequisites** (required
+  SAPI / OS / extension / ini directive) resolved against the scan's own
+  evidence to *observed*, *contradicted*, or *unknown* — a contradicted
+  precondition marks a lead "likely N/A here" (e.g. CVE-2024-4577 on a
+  non-`php-cgi` SAPI; the php2shell CVEs when `session.upload_progress.enabled`
+  is Off) without dropping it. Shown in output, reports and the web card.
+
 - Web GUI: the **Failures** tab has a sort control — scan order, or grouped
   **by failure type** (i/o timeouts first, then other errors).
 - **Coverage-aware scan diffing:** a comparison now distinguishes a finding
