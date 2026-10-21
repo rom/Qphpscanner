@@ -38,6 +38,7 @@ type flags struct {
 	web           bool
 	listen        string
 	showVersion   bool
+	completion    string
 	verbose       bool
 	quiet         bool
 	noDNSEnum     bool
@@ -133,6 +134,7 @@ func bindFlags(fs *flag.FlagSet) *flags {
 	fs.BoolVar(&f.web, "web", false, "run the web GUI instead of a one-shot scan")
 	fs.StringVar(&f.listen, "listen", "127.0.0.1:8088", "web GUI listen address (with --web)")
 	fs.BoolVar(&f.showVersion, "version", false, "print version and exit")
+	fs.StringVar(&f.completion, "completion", "", "print a shell completion script (bash, zsh or fish) and exit")
 	fs.BoolVar(&f.verbose, "verbose", false, "print per-host/service progress detail (open/closed ports, PHP verdicts)")
 	fs.BoolVar(&f.verbose, "v", false, "shorthand for --verbose")
 	fs.BoolVar(&f.quiet, "quiet", false, "suppress progress output")

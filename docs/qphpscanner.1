@@ -106,6 +106,9 @@ Suppress progress output.
 .B \-\-no\-dns\-enum
 Disable subdomain enumeration for \fB*.domain\fR targets.
 .TP
+.B \-\-verify\-subdomains
+Keep only enumerated subdomains that resolve in DNS.
+.TP
 .BI \-\-targets\-file " file" ", " \-iL " file"
 Read targets from a file, one per line ('-' for stdin). Blank lines and
 '#' comments are ignored.
@@ -121,6 +124,9 @@ Cap outbound HTTP requests to n per second across the scan.
 .TP
 .BI \-\-per\-host\-concurrency " n"
 Limit concurrent probes against a single host.
+.TP
+.BI \-\-host\-concurrency " n"
+Limit how many distinct hosts are scanned at once (0 = no host-level cap).
 .TP
 .BI \-\-jitter " duration"
 Sleep a random time up to this before each service probe.
@@ -146,8 +152,14 @@ Override the Host header (virtual-host scanning).
 .BI \-\-proxy " url"
 Route requests through an http(s):// or socks5:// proxy.
 .TP
+.BI \-\-favicon\-catalog " file|url"
+Load a favicon-hash → product catalogue (JSON) to attribute matched site
+favicons. Repeatable.
+.TP
 .BI \-\-vuln\-feed " file|url"
-Merge an external vulnerability feed (repeatable).
+Merge an external vulnerability feed (repeatable). The native
+qphpscanner-vuln-feed schema, OSV records (single or array) and CSAF 2.0
+advisories are auto-detected.
 .TP
 .BI \-\-fail\-on " level"
 Exit with status 2 if a finding meets \fIlevel\fR: low, medium, high,
@@ -195,6 +207,9 @@ Address for the web GUI (default \fB127.0.0.1:8088\fR).
 .TP
 .B \-\-version
 Print version information and exit.
+.TP
+.BI \-\-completion " shell"
+Print a shell completion script for \fIshell\fR (bash, zsh or fish) and exit.
 .SH OUTPUT
 The scan output (\fB\-\-format\fR) is a machine-readable record of every probed
 service in text, JSON or XML. A report (\fB\-\-report\fR) is a human-readable

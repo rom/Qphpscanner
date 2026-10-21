@@ -70,6 +70,14 @@ func run(args []string) error {
 		fmt.Println(version.String())
 		return nil
 	}
+	if f.completion != "" {
+		script, err := generateCompletion(f.completion, fs)
+		if err != nil {
+			return err
+		}
+		fmt.Print(script)
+		return nil
+	}
 
 	set := map[string]bool{}
 	fs.Visit(func(fl *flag.Flag) { set[fl.Name] = true })
