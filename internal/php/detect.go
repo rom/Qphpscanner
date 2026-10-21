@@ -37,6 +37,9 @@ type Input struct {
 	// Catalog supplies vulnerability/EOL data. When nil, the built-in default
 	// catalogue is used.
 	Catalog *Catalog
+	// Signatures is the active detection signature set (built-ins plus any
+	// runtime signature packs). When nil, the built-in signatures are used.
+	Signatures *SignatureSet
 	// ComposerFiles are operator-supplied Composer file contents (composer.json
 	// / composer.lock / installed.json, sniffed by content) for projects whose
 	// files are not web-exposed. They augment or override any fetched ones.
@@ -141,7 +144,7 @@ func Analyze(in Input) *Detection {
 	ctrl := controlSignature(in.Control)
 
 	// --- Primary response ---------------------------------------------------
-	analyzeResponse(in.Root, in.TargetURL, addEv, addFw, addExt, addMod, setVersion, setVariant)
+	analyzeResponse(in.Signatures, in.Root, in.TargetURL, addEv, addFw, addExt, addMod, setVersion, setVariant)
 
 	// --- URL extension hint -------------------------------------------------
 	if u := strings.ToLower(in.TargetURL); hasPHPExtension(u) {
@@ -161,7 +164,7 @@ func Analyze(in Input) *Detection {
 		if resp == nil || resp.Err != "" {
 			continue
 		}
-		analyzeResponse(resp, url, addEv, addFw, addExt, addMod, setVersion, setVariant)
+		analyzeResponse(in.Signatures, resp, url, addEv, addFw, addExt, addMod, setVersion, setVariant)
 
 		body := resp.BodyString()
 		if resp.Status == 200 && isPHPInfo(body) {
@@ -363,8 +366,10 @@ func observedFacts(d *Detection) ObservedFacts {
 	return f
 }
 
-// analyzeResponse extracts header, cookie and body evidence from one response.
+// analyzeResponse extracts header, cookie and body evidence from one response,
+// using the active signature set (nil = built-ins).
 func analyzeResponse(
+	sigs *SignatureSet,
 	resp *probe.Response,
 	source string,
 	addEv func(Evidence),
@@ -388,7 +393,7 @@ func analyzeResponse(
 	}
 
 	// Header-based signatures.
-	for _, sig := range headerSigs {
+	for _, sig := range sigs.headerSigs() {
 		for _, val := range resp.HeaderValues(sig.header) {
 			if sig.contains == "" || containsFold(val, sig.contains) {
 				how := "header present"
@@ -438,7 +443,7 @@ func analyzeResponse(
 
 	// Cookie-based signatures.
 	for _, c := range resp.Cookies {
-		for _, sig := range cookieSigs {
+		for _, sig := range sigs.cookieSigs() {
 			if cookieMatch(c.Name, sig) {
 				how := "cookie-name match"
 				if sig.kind == matchPrefix {
@@ -458,7 +463,7 @@ func analyzeResponse(
 	// Body-based signatures.
 	body := resp.BodyString()
 	if body != "" {
-		for _, sig := range bodySigs {
+		for _, sig := range sigs.bodySigs() {
 			if loc := sig.re.FindStringIndex(body); loc != nil {
 				snippet, line := bodyContext(body, loc[0], loc[1])
 				addEv(Evidence{

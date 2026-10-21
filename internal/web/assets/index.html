@@ -125,6 +125,15 @@
           <p class="hint">Read client-side and sent with the scan. Builds a dependency inventory (declared / locked / installed) and correlates package advisories — for projects whose Composer files are not web-exposed.</p>
         </details>
 
+        <details class="advanced">
+          <summary>Signature packs (extend detection)</summary>
+          <label for="sigpack-file" class="file-btn" title="Load versioned detection signature pack(s) (JSON) to extend header/cookie/body matchers without recompiling">Load signature pack(s)…</label>
+          <input type="file" id="sigpack-file" accept=".json,application/json" hidden multiple>
+          <button type="button" id="sigpack-clear" class="link-btn hidden" title="Clear loaded signature packs">clear</button>
+          <span id="sigpack-file-name" class="hint"></span>
+          <p class="hint">Read client-side and sent with the scan. Adds versioned detection signatures (<code>qphpscanner-signature-pack/1</code>) on top of the built-ins; the active pack versions are recorded in the scan's provenance.</p>
+        </details>
+
         <div class="btn-row">
           <button type="submit" id="scan-btn" class="primary" title="Start the scan">Scan</button>
           <button type="button" id="cancel-btn" class="secondary hidden" title="Stop the scan — results collected so far are kept">Cancel</button>

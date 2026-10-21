@@ -108,6 +108,36 @@ if (composerFileEl) {
   });
 }
 
+// Signature packs loaded client-side and sent with the scan to extend detection.
+let signaturePackContents = [];
+const sigpackFileEl = $("sigpack-file");
+if (sigpackFileEl) {
+  const nameEl = $("sigpack-file-name");
+  const clearEl = $("sigpack-clear");
+  sigpackFileEl.addEventListener("change", async () => {
+    const files = Array.from(sigpackFileEl.files || []);
+    const names = [];
+    for (const file of files) {
+      try {
+        signaturePackContents.push(await file.text());
+        names.push(file.name);
+      } catch (_) {
+        setStatus("Could not read " + file.name, true);
+      }
+    }
+    if (names.length) {
+      nameEl.textContent = " " + signaturePackContents.length + " pack(s): " + names.join(", ");
+      clearEl.classList.remove("hidden");
+    }
+    sigpackFileEl.value = "";
+  });
+  clearEl.addEventListener("click", () => {
+    signaturePackContents = [];
+    nameEl.textContent = "";
+    clearEl.classList.add("hidden");
+  });
+}
+
 // ---------- tabs ----------
 let overviewCache = null;
 for (const tab of document.querySelectorAll(".tab")) {
@@ -215,6 +245,7 @@ async function runScan() {
     resolve: splitList($("resolve").value),
     sni: $("sni").value.trim(),
     composer_files: composerFileContents,
+    signature_packs: signaturePackContents,
   };
 
   scanBtn.disabled = true;

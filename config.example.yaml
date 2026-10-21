@@ -124,6 +124,11 @@ vuln_feeds:
   - docs/vuln-feed.example.json
 # External favicon-hash → product catalogues (file or URL).
 favicon_catalogs: []
+# Versioned detection signature packs (qphpscanner-signature-pack/1 JSON; file
+# or URL). Each pack adds header/cookie/body matchers on top of the built-ins
+# without recompiling; the active pack id/version values are recorded in the
+# scan's provenance.
+signature_packs: []
 # Operator-supplied Composer files (composer.json / composer.lock /
 # installed.json) to inventory a project whose files are not web-exposed.
 composer_files: []

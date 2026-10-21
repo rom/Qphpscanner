@@ -142,6 +142,22 @@ func run(args []string) error {
 		opts.Catalog = cat
 	}
 
+	// Load any versioned signature packs onto the built-in default pack; their
+	// id/version is recorded in scan provenance.
+	if len(f.signaturePacks) > 0 {
+		sigs := php.DefaultSignatureSet()
+		for _, src := range f.signaturePacks {
+			pack, perr := php.LoadSignaturePack(ctx, src, nil)
+			if perr != nil {
+				return perr
+			}
+			sigs.Merge(pack)
+			fmt.Fprintf(os.Stderr, "loaded signature pack %s v%s (%d signatures) from %s\n",
+				pack.ID, pack.Version, pack.Count(), src)
+		}
+		opts.Signatures = sigs
+	}
+
 	// Register any external favicon-hash catalogues before scanning.
 	for _, src := range f.faviconCatalogs {
 		n, err := php.LoadFaviconCatalog(ctx, src, nil)
@@ -473,6 +489,7 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		// Feeds and catalogues from config run before any from the CLI.
 		f.vulnFeeds = append(stringSlice(cfg.VulnFeeds), f.vulnFeeds...)
 		f.faviconCatalogs = append(stringSlice(cfg.FaviconCatalogs), f.faviconCatalogs...)
+		f.signaturePacks = append(stringSlice(cfg.SignaturePacks), f.signaturePacks...)
 		f.composerFiles = append(stringSlice(cfg.ComposerFiles), f.composerFiles...)
 	}
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/scanner"
 )
 
@@ -242,7 +243,20 @@ func provenanceNotes(o, n *scanner.ScanResult) []string {
 		notes = append(notes, fmt.Sprintf("vuln catalogue: php %d/cms %d → php %d/cms %d",
 			om.CatalogPHP, om.CatalogCMS, nm.CatalogPHP, nm.CatalogCMS))
 	}
+	add("signature packs", signaturePackLabel(om.SignaturePacks), signaturePackLabel(nm.SignaturePacks))
 	return notes
+}
+
+// signaturePackLabel renders the active signature packs for a provenance note.
+func signaturePackLabel(refs []php.PackRef) string {
+	if len(refs) == 0 {
+		return "built-in only"
+	}
+	parts := make([]string, 0, len(refs))
+	for _, r := range refs {
+		parts = append(parts, r.ID+"/"+r.Version)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // WriteDiff renders a diff as text or JSON.

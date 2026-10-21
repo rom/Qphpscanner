@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/portspec"
 	"github.com/rom/qphpscanner/internal/probe"
 	"github.com/rom/qphpscanner/internal/report"
@@ -201,9 +202,10 @@ type scanRequest struct {
 	RequestBudget   int      `json:"request_budget"`
 	Allow           []string `json:"allow"`
 	Block           []string `json:"block"`
-	Resolve         []string `json:"resolve"`        // "host:port:addr" rules
-	SNI             string   `json:"sni"`            // TLS SNI override
-	ComposerFiles   []string `json:"composer_files"` // raw composer.json/.lock/installed.json contents
+	Resolve         []string `json:"resolve"`         // "host:port:addr" rules
+	SNI             string   `json:"sni"`             // TLS SNI override
+	ComposerFiles   []string `json:"composer_files"`  // raw composer.json/.lock/installed.json contents
+	SignaturePacks  []string `json:"signature_packs"` // raw signature-pack JSON contents
 }
 
 // streamMsg is one line of the NDJSON response stream.
@@ -257,6 +259,11 @@ func (s *Server) buildOptions(req scanRequest) (scanner.Options, []string, error
 		if strings.TrimSpace(body) != "" {
 			opts.ComposerFiles = append(opts.ComposerFiles, []byte(body))
 		}
+	}
+	if sigs, err := buildSignatureSet(req.SignaturePacks); err != nil {
+		return scanner.Options{}, nil, err
+	} else if sigs != nil {
+		opts.Signatures = sigs
 	}
 	if req.Ports != "" {
 		ports, err := parsePortsField(req.Ports)
@@ -587,6 +594,27 @@ func hostOf(t string) string {
 		return h
 	}
 	return t
+}
+
+// buildSignatureSet parses any uploaded signature packs onto the built-in
+// default set. It returns nil (no override) when no pack was supplied, or a
+// user error when a pack is malformed.
+func buildSignatureSet(packs []string) (*php.SignatureSet, error) {
+	var sigs *php.SignatureSet
+	for _, body := range packs {
+		if strings.TrimSpace(body) == "" {
+			continue
+		}
+		pack, err := php.ParseSignaturePack([]byte(body))
+		if err != nil {
+			return nil, err
+		}
+		if sigs == nil {
+			sigs = php.DefaultSignatureSet()
+		}
+		sigs.Merge(pack)
+	}
+	return sigs, nil
 }
 
 // parseResolveRules turns "host:port:addr" strings into probe rules.

@@ -144,6 +144,18 @@ func TestDiffBudgetProvenanceNote(t *testing.T) {
 	}
 }
 
+func TestDiffSignaturePackProvenanceNote(t *testing.T) {
+	old := oneScan(phpSvc("https://h/", 200))
+	nw := oneScan(phpSvc("https://h/", 200))
+	old.Meta = scanner.Meta{Mode: "deep", TLSMode: "auto", TimeoutMS: 10000}
+	nw.Meta = scanner.Meta{Mode: "deep", TLSMode: "auto", TimeoutMS: 10000,
+		SignaturePacks: []php.PackRef{{ID: "builtin", Version: "1"}, {ID: "acme", Version: "9.9"}}}
+	notes := strings.Join(Diff(old, nw).ProvenanceNotes, " | ")
+	if !strings.Contains(notes, "signature packs: built-in only → builtin/1, acme/9.9") {
+		t.Errorf("missing signature-pack note: %q", notes)
+	}
+}
+
 func TestDiffProvenanceNotes(t *testing.T) {
 	old := oneScan(phpSvc("https://h/", 200))
 	nw := oneScan(phpSvc("https://h/", 200))

@@ -379,6 +379,45 @@ Extend or override it with `--favicon-catalog FILE|URL` (repeatable); the file
 is `{"schema":"qphpscanner-favicon-catalog/1","favicons":[{"hash":"…",
 "product":"…","framework":"…","php":true}]}`. An unknown hash is simply inert.
 
+## Signature packs
+
+Detection signatures can be extended at runtime without recompiling. Load a
+**versioned signature pack** with `--signature-pack FILE|URL` (repeatable;
+config `signature_packs`, or the web uploader). A pack is a dependency-free
+JSON document:
+
+```json
+{
+  "schema": "qphpscanner-signature-pack/1",
+  "id": "my-pack",
+  "version": "2026.10",
+  "headers": [
+    {"header": "X-My-App", "contains": "myapp", "framework": "MyApp", "php": true, "weight": 60, "detail": "..."}
+  ],
+  "cookies": [
+    {"name": "myapp_sess", "match": "exact", "framework": "MyApp", "weight": 55, "detail": "..."}
+  ],
+  "body": [
+    {"id": "body.myapp", "pattern": "(?i)powered by myapp", "framework": "MyApp", "php": true, "weight": 50, "detail": "..."}
+  ]
+}
+```
+
+A matcher's `weight` (0–100) contributes to the PHP confidence score only when
+`php: true` (or a `variant` is set); otherwise it records the product/framework
+without boosting PHP confidence (the same gating the built-ins use). Body
+patterns are Go/RE2 regular expressions, compiled with size and count bounds —
+an invalid or over-long pattern, an unknown schema, a missing id/version, or a
+pack that is too large or holds too many matchers is rejected with a clear
+error. Everything stays bounded.
+
+The built-ins remain the **default pack**; loaded packs are merged on top. The
+active pack id/version values are recorded in the scan's provenance
+(`meta.signature_packs` in JSON/XML output), so a [diff](#diffing-scans) can
+distinguish a signature-set change from a real site change and notes it
+explicitly. Combine with the [offline corpus](#offline-corpus-record--replay)
+to validate new signatures against captured responses with no network.
+
 ## Composer dependency inventory
 
 In deep mode, an exposed `composer.json`, `composer.lock` or

@@ -202,6 +202,16 @@ Merge an external vulnerability feed (repeatable). The native
 qphpscanner-vuln-feed schema, OSV records (single or array) and CSAF 2.0
 advisories are auto-detected.
 .TP
+.BI \-\-signature\-pack " file|url"
+Load a versioned detection signature pack (repeatable). A pack is a
+.B qphpscanner-signature-pack/1
+JSON document with an id/version and header/cookie/body matchers that extend the
+built-in signatures without recompiling. Body patterns are compiled with
+size/count bounds and an invalid pattern is rejected with a clear error. The
+built-ins remain the default pack, and the active pack id/version values are
+recorded in the scan's provenance so a diff can distinguish a signature-set
+change from a real site change.
+.TP
 .BI \-\-fail\-on " level"
 Exit with status 2 if a finding meets \fIlevel\fR: low, medium, high,
 critical or eol.

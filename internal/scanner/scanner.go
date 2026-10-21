@@ -113,6 +113,9 @@ type Options struct {
 	// --- Data ---
 	// Catalog supplies vulnerability/EOL data (nil = built-in default).
 	Catalog *php.Catalog
+	// Signatures supplies the active detection signature set, including any
+	// runtime signature packs merged onto the built-ins (nil = built-ins only).
+	Signatures *php.SignatureSet
 	// ComposerFiles are operator-supplied Composer file contents merged into the
 	// dependency inventory for projects whose files are not web-exposed.
 	ComposerFiles [][]byte
@@ -405,6 +408,11 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 			RequestBudget: opts.RequestBudget,
 		},
 	}
+	// Record the active signature packs only when a runtime pack is loaded; the
+	// built-in-only default leaves this absent so older scans compare cleanly.
+	if opts.Signatures != nil {
+		out.Meta.SignaturePacks = opts.Signatures.Refs()
+	}
 	for _, h := range hostOrder {
 		svcs := byHost[h]
 		if len(svcs) == 0 {
@@ -589,6 +597,7 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 		Deep:          opts.Mode == ModeDeep,
 		Root:          root,
 		Catalog:       opts.Catalog,
+		Signatures:    opts.Signatures,
 		ComposerFiles: opts.ComposerFiles,
 	}
 

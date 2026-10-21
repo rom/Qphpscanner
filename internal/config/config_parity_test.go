@@ -86,6 +86,16 @@ func TestRequestBudgetConfig(t *testing.T) {
 	}
 }
 
+func TestSignaturePacksConfig(t *testing.T) {
+	c, err := loadString(t, "signature_packs:\n  - packs/a.json\n  - https://example/b.json\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.SignaturePacks) != 2 || c.SignaturePacks[0] != "packs/a.json" {
+		t.Fatalf("signature_packs = %+v", c.SignaturePacks)
+	}
+}
+
 func TestResolveAndSNIConfig(t *testing.T) {
 	c, err := loadString(t, "sni: origin.example.com\nresolve:\n  - \"example.com:443:203.0.113.10\"\n  - \"example.com:80:203.0.113.10\"\n")
 	if err != nil {

@@ -46,6 +46,11 @@ type Meta struct {
 	// RequestBudget is the per-service deep-mode probe budget in effect
 	// (0 = unlimited); a change between scans can explain coverage differences.
 	RequestBudget int `json:"request_budget,omitempty" xml:"request_budget,omitempty"`
+	// SignaturePacks records the active detection signature packs (built-in plus
+	// any loaded at runtime) with their versions, so a diff can tell a
+	// signature-set change from a site change. Absent when only the built-in
+	// signatures are in use.
+	SignaturePacks []php.PackRef `json:"signature_packs,omitempty" xml:"signature_packs>pack,omitempty"`
 }
 
 // Summary holds roll-up counts for quick triage.
