@@ -64,6 +64,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/scan", s.handleScan)
 	mux.HandleFunc("GET /api/download", s.handleDownload)
 	mux.HandleFunc("GET /api/history", s.handleHistory)
+	mux.HandleFunc("GET /api/diff", s.handleDiff)
+	mux.HandleFunc("GET /api/overview", s.handleOverview)
 	// Any other /api/ request (wrong method, unknown path) gets a clean JSON
 	// error instead of falling through to the file server, whose 404/405 for a
 	// POST is opaque to the GUI.
@@ -186,6 +188,8 @@ type scanRequest struct {
 	ResolveDNS      bool     `json:"resolve_dns"`
 	Banners         bool     `json:"banners"`
 	HostConcurrency int      `json:"host_concurrency"`
+	Allow           []string `json:"allow"`
+	Block           []string `json:"block"`
 }
 
 // streamMsg is one line of the NDJSON response stream.
@@ -216,6 +220,8 @@ func (s *Server) buildOptions(req scanRequest) (scanner.Options, []string, error
 		ResolveDNS:      req.ResolveDNS,
 		GrabBanners:     req.Banners,
 		HostConcurrency: req.HostConcurrency,
+		Allowlist:       cleanTargets(req.Allow),
+		Blocklist:       cleanTargets(req.Block),
 		MaxHostsPerSpec: s.maxTargets,
 	}
 	if req.Ports != "" {
@@ -366,6 +372,45 @@ func sanitiseID(id string) string {
 		}
 	}
 	return b.String()
+}
+
+// handleDiff compares two retained scans (by id; "" or "latest" = newest) and
+// returns the structured difference.
+func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
+	ida := r.URL.Query().Get("a")
+	idb := r.URL.Query().Get("b")
+	a := s.lookup(latestID(ida))
+	b := s.lookup(latestID(idb))
+	if a == nil || b == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "both scans must exist (run or select two scans first)"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"a":    scanMeta(a),
+		"b":    scanMeta(b),
+		"diff": report.Diff(a, b),
+	})
+}
+
+func latestID(id string) string {
+	if id == "latest" {
+		return ""
+	}
+	return id
+}
+
+func scanMeta(res *scanner.ScanResult) map[string]interface{} {
+	return map[string]interface{}{
+		"mode":        res.Meta.Mode,
+		"finished_at": res.Meta.FinishedAt.Format(time.RFC3339),
+		"hosts":       res.Summary.HostsScanned,
+	}
+}
+
+// handleOverview returns aggregated statistics and clickable tag groups across
+// all retained scans.
+func (s *Server) handleOverview(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.computeOverview())
 }
 
 // handleHistory lists retained scans (newest first) with light summaries.
