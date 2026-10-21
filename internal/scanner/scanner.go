@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rom/qphpscanner/internal/corpus"
 	"github.com/rom/qphpscanner/internal/dnsenum"
 	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/portspec"
@@ -115,6 +116,10 @@ type Options struct {
 	// ComposerFiles are operator-supplied Composer file contents merged into the
 	// dependency inventory for projects whose files are not web-exposed.
 	ComposerFiles [][]byte
+	// Corpus, when set, records a sanitised fixture of each service's detection
+	// inputs (the responses fed to php.Analyze) so the scan can be replayed
+	// offline with Replay. See internal/corpus.
+	Corpus *corpus.Recorder
 
 	// --- Resume ---
 	// CheckpointPath records completed services so a scan can resume.
@@ -633,9 +638,7 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 		// backing off rather than hammering), skip the optional discovery probes.
 		if rateLimited(root, notFound, in.EasterCredits, in.Favicon, in.PathInfo) {
 			res.DiscoveryLimited = "rate-limited"
-			res.PHP = php.Analyze(in)
-			res.DurationMS = time.Since(start).Milliseconds()
-			return res
+			return finalizeService(res, in, opts, start)
 		}
 
 		// Phase 2 — adaptive discovery. A first analysis of the core responses
@@ -662,14 +665,43 @@ func scanService(ctx context.Context, fetcher *probe.Fetcher, j job, opts Option
 			}
 			in.Extra[u] = get(u)
 		}
-		res.PHP = php.Analyze(in)
-		res.DurationMS = time.Since(start).Milliseconds()
-		return res
+		return finalizeService(res, in, opts, start)
 	}
 
+	return finalizeService(res, in, opts, start)
+}
+
+// finalizeService runs the detection pipeline on the assembled input, records a
+// corpus snapshot when recording is enabled, and stamps the elapsed time.
+func finalizeService(res ServiceResult, in php.Input, opts Options, start time.Time) ServiceResult {
+	if opts.Corpus != nil {
+		opts.Corpus.Add(corpusService(res.URL, in))
+	}
 	res.PHP = php.Analyze(in)
 	res.DurationMS = time.Since(start).Milliseconds()
 	return res
+}
+
+// corpusService snapshots the responses that fed php.Analyze into a
+// serialisable, sanitised corpus entry.
+func corpusService(target string, in php.Input) corpus.Service {
+	s := corpus.Service{
+		Target:        target,
+		Deep:          in.Deep,
+		Root:          corpus.FromResponse(in.Root),
+		EasterCredits: corpus.FromResponse(in.EasterCredits),
+		EasterLogo:    corpus.FromResponse(in.EasterLogo),
+		Favicon:       corpus.FromResponse(in.Favicon),
+		PathInfo:      corpus.FromResponse(in.PathInfo),
+		Control:       corpus.FromResponse(in.Control),
+	}
+	if len(in.Extra) > 0 {
+		s.Extra = make(map[string]*corpus.Response, len(in.Extra))
+		for k, v := range in.Extra {
+			s.Extra[k] = corpus.FromResponse(v)
+		}
+	}
+	return s
 }
 
 // rateLimited reports whether any core response indicates the host is throttling

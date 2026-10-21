@@ -76,6 +76,8 @@ type flags struct {
 	outAll           string
 	diffPath         string
 	diffFormat       string
+	recordCorpus     string
+	replayCorpus     string
 	resume           string
 	verifySubdomains bool
 	targetsFile      string
@@ -185,6 +187,8 @@ func bindFlags(fs *flag.FlagSet) *flags {
 	fs.StringVar(&f.outAll, "oA", "", "write json/xml/csv/sarif/txt outputs and an HTML report to <base>.*")
 	fs.StringVar(&f.diffPath, "diff", "", "compare against a prior JSON scan result and print the differences")
 	fs.StringVar(&f.diffFormat, "diff-format", "text", "diff output format: text or json")
+	fs.StringVar(&f.recordCorpus, "record-corpus", "", "record a sanitised fixture of the scan's detection inputs (responses) to this file for offline replay")
+	fs.StringVar(&f.replayCorpus, "replay-corpus", "", "replay a recorded corpus file through detection offline (no network); emits a scan result like a live run")
 	fs.StringVar(&f.resume, "resume", "", "checkpoint file: record completed services and resume from it")
 	fs.StringVar(&f.webAuth, "web-auth", "", "protect the web GUI with HTTP Basic auth (user:pass)")
 

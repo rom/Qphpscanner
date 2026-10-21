@@ -217,6 +217,20 @@ Compare against a prior JSON scan result and print the differences.
 .BI \-\-diff\-format " text|json"
 Format for \fB\-\-diff\fR output (default text).
 .TP
+.BI \-\-record\-corpus " file"
+Record a sanitised fixture of the scan's detection inputs (the responses fed
+to analysis) to \fIfile\fR for offline replay. Session-cookie values and
+credential headers are redacted; response bodies are kept verbatim as the
+fingerprinting material, so review a corpus before sharing it.
+.TP
+.BI \-\-replay\-corpus " file"
+Replay a corpus recorded with \fB\-\-record\-corpus\fR back through detection
+offline — no network and no targets — emitting a scan result exactly as a live
+run would. A regression harness: it reproduces the PHP verdict, version,
+evidence and vulnerability leads from stored responses. Honours
+\fB\-\-vuln\-feed\fR, \fB\-\-signature\-pack\fR, \fB\-\-format\fR,
+\fB\-\-report\fR and \fB\-\-fail\-on\fR.
+.TP
 .BI \-\-resume " file"
 Checkpoint completed services to \fIfile\fR and resume from it.
 .TP

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/rom/qphpscanner/internal/config"
+	"github.com/rom/qphpscanner/internal/corpus"
 	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/portspec"
 	"github.com/rom/qphpscanner/internal/probe"
@@ -123,20 +124,10 @@ func run(args []string) error {
 		return srv.ListenAndServe()
 	}
 
-	// Extra targets from a file or stdin.
-	fileTargets, err := readTargetsFile(f.targetsFile)
-	if err != nil {
-		return err
-	}
-	targets = append(targets, fileTargets...)
-
-	if len(targets) == 0 {
-		fs.Usage()
-		return fmt.Errorf("no targets given (pass targets as arguments, --targets-file, --config, or use --web)")
-	}
-
 	// Build the vulnerability catalogue, merging any external feeds (native,
-	// OSV or CSAF — auto-detected).
+	// OSV or CSAF — auto-detected). Feeds, favicon catalogues and Composer files
+	// shape detection, so they are loaded before both a live scan and an offline
+	// replay.
 	if len(f.vulnFeeds) > 0 {
 		cat := php.DefaultCatalog()
 		for _, src := range f.vulnFeeds {
@@ -167,6 +158,29 @@ func run(args []string) error {
 		opts.ComposerFiles = append(opts.ComposerFiles, data)
 	}
 
+	// Offline replay: run a recorded corpus back through detection with no
+	// network and no targets, emitting a scan result like a live run.
+	if f.replayCorpus != "" {
+		return runReplay(f, outFmt, outFile, repFmt, repFile, opts)
+	}
+
+	// Extra targets from a file or stdin.
+	fileTargets, err := readTargetsFile(f.targetsFile)
+	if err != nil {
+		return err
+	}
+	targets = append(targets, fileTargets...)
+
+	if len(targets) == 0 {
+		fs.Usage()
+		return fmt.Errorf("no targets given (pass targets as arguments, --targets-file, --config, or use --web)")
+	}
+
+	// Record a sanitised corpus of this scan's detection inputs for later replay.
+	if f.recordCorpus != "" {
+		opts.Corpus = corpus.NewRecorder()
+	}
+
 	reporter := newProgressReporter(os.Stderr, f.verbose, f.quiet)
 	opts.OnProgress = reporter.handle
 	opts.DisableDNSEnum = f.noDNSEnum
@@ -181,12 +195,54 @@ func run(args []string) error {
 		return err
 	}
 
+	if opts.Corpus != nil {
+		if err := writeCorpus(f.recordCorpus, opts.Corpus.Corpus(version.Name, version.Version)); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "recorded replay corpus to %s\n", f.recordCorpus)
+	}
+
 	fmt.Fprintf(os.Stderr, "scanned %d host(s), %d open port(s), %d PHP service(s) in %d ms\n",
 		result.Summary.HostsScanned, result.Summary.OpenPorts,
 		result.Summary.PHPConfirmed+result.Summary.PHPLikely, result.Meta.DurationMS)
 
 	if f.failOn != "" && report.FailOn(result, f.failOn) {
 		return &exitError{code: 2}
+	}
+	return nil
+}
+
+// runReplay loads a recorded corpus and runs it back through detection offline,
+// emitting the reconstructed result exactly as a live scan would.
+func runReplay(f *flags, outFmt, outFile, repFmt, repFile string, opts scanner.Options) error {
+	data, err := os.ReadFile(f.replayCorpus)
+	if err != nil {
+		return fmt.Errorf("read replay corpus: %w", err)
+	}
+	c, err := corpus.Load(data)
+	if err != nil {
+		return fmt.Errorf("load replay corpus %q: %w", f.replayCorpus, err)
+	}
+	result := scanner.Replay(c, opts)
+	if err := emitResults(result, f, outFmt, outFile, repFmt, repFile); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "replayed %d service(s) from %s\n", len(c.Services), f.replayCorpus)
+	if f.failOn != "" && report.FailOn(result, f.failOn) {
+		return &exitError{code: 2}
+	}
+	return nil
+}
+
+// writeCorpus serialises a recorded corpus to a file.
+func writeCorpus(path string, c *corpus.Corpus) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create corpus file: %w", err)
+	}
+	defer file.Close()
+	if err := corpus.Write(file, c); err != nil {
+		return fmt.Errorf("write corpus: %w", err)
 	}
 	return nil
 }
