@@ -370,6 +370,12 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 		byHost[r.Host] = append(byHost[r.Host], r)
 	}
 
+	cat := opts.Catalog
+	if cat == nil {
+		cat = php.DefaultCatalog()
+	}
+	catPHP, catCMS := cat.Counts()
+
 	out := &ScanResult{
 		Meta: Meta{
 			Tool:       version.Name,
@@ -379,6 +385,15 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 			FinishedAt: time.Now(),
 			DurationMS: time.Since(start).Milliseconds(),
 			Ports:      opts.Ports,
+			TLSMode:    opts.TLSMode,
+			TimeoutMS:  opts.Timeout.Milliseconds(),
+			Follow:     opts.Follow,
+			Insecure:   opts.Insecure,
+			Auth:       opts.Cookie != "" || opts.BearerToken != "" || opts.BasicUser != "" || opts.BasicPass != "",
+			Pinned:     len(opts.Resolve) > 0 || opts.SNIServerName != "",
+			AllowBlock: len(opts.Allowlist) > 0 || len(opts.Blocklist) > 0,
+			CatalogPHP: catPHP,
+			CatalogCMS: catCMS,
 		},
 	}
 	for _, h := range hostOrder {
