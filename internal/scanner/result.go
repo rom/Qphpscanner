@@ -88,6 +88,10 @@ type ServiceResult struct {
 	// CheckedAt is when this endpoint was probed (the moment the scan of this
 	// service began). Zero for results restored from an older checkpoint.
 	CheckedAt time.Time `json:"checked_at,omitempty" xml:"checked_at,omitempty"`
+	// DiscoveryLimited notes when adaptive deep-probing stopped early:
+	// "budget" (per-service request budget spent) or "rate-limited" (the host
+	// returned 429/503, so optional probes were skipped). Empty otherwise.
+	DiscoveryLimited string `json:"discovery_limited,omitempty" xml:"discovery_limited,omitempty"`
 }
 
 // HTTPInfo is a serialisable summary of the primary HTTP response.

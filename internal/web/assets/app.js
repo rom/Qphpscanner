@@ -209,6 +209,7 @@ async function runScan() {
     resolve_dns: $("resolvedns").checked,
     banners: $("banners").checked,
     host_concurrency: parseInt($("hostconc").value, 10) || 0,
+    request_budget: parseInt($("reqbudget").value, 10) || 0,
     allow: splitList($("allow").value),
     block: splitList($("block").value),
     resolve: splitList($("resolve").value),
@@ -888,6 +889,7 @@ function renderService(svc, target) {
 
   // When this endpoint was probed (skip the Go zero time of old checkpoints).
   if (svc.checked_at && !svc.checked_at.startsWith("0001")) add("Scanned", fmtClock(svc.checked_at));
+  if (svc.discovery_limited) add("Discovery", "limited (" + svc.discovery_limited + ")");
 
   if (!svc.port_open) {
     add("Port", "closed/filtered");

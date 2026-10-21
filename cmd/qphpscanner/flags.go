@@ -44,11 +44,12 @@ type flags struct {
 	noDNSEnum     bool
 
 	// politeness
-	rate     float64
-	perHost  int
-	hostConc int
-	jitter   time.Duration
-	retries  int
+	rate          float64
+	perHost       int
+	hostConc      int
+	jitter        time.Duration
+	retries       int
+	requestBudget int
 
 	// enrichment
 	resolveDNS bool
@@ -156,6 +157,7 @@ func bindFlags(fs *flag.FlagSet) *flags {
 	fs.IntVar(&f.hostConc, "host-concurrency", 0, "max distinct hosts scanned at once (0 = no host cap)")
 	fs.DurationVar(&f.jitter, "jitter", 0, "random delay up to this before each service probe")
 	fs.IntVar(&f.retries, "retries", 0, "extra attempts on a transient network error")
+	fs.IntVar(&f.requestBudget, "request-budget", 0, "cap deep-mode probes per service; optional app-discovery probes stop when spent (0 = no cap)")
 
 	// Enrichment.
 	fs.BoolVar(&f.resolveDNS, "resolve-dns", false, "add forward and reverse DNS for each host")
