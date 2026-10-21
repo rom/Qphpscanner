@@ -61,3 +61,78 @@ func TestOnServiceStreamsAllOutcomes(t *testing.T) {
 		t.Error("expected the closed port reported via OnService (even with IncludeClosed off)")
 	}
 }
+
+func TestOnHostResolvedAndCheckedAt(t *testing.T) {
+	t.Setenv("NO_PROXY", "*")
+	ts := phpTestServer()
+	defer ts.Close()
+
+	var mu sync.Mutex
+	hostPTR := map[string][]string{}
+	var svcCount, timed int
+
+	before := time.Now().Add(-2 * time.Second)
+	res, err := Scan(context.Background(), []string{ts.URL}, Options{
+		Mode: ModeDetect, TLSMode: TLSOff, Timeout: 3 * time.Second,
+		ResolveDNS: true,
+		Resolver:   fakeDNS{ptr: map[string][]string{"127.0.0.1": {"localhost"}}},
+		OnHostResolved: func(host string, _, ptr []string) {
+			mu.Lock()
+			hostPTR[host] = ptr
+			mu.Unlock()
+		},
+		OnService: func(r ServiceResult) {
+			mu.Lock()
+			svcCount++
+			if !r.CheckedAt.IsZero() {
+				timed++
+			}
+			mu.Unlock()
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The host's reverse name resolves and is streamed before its services —
+	// this is what lets an IP target show its hostname during the scan.
+	ptr, ok := hostPTR["127.0.0.1"]
+	if !ok {
+		t.Fatalf("OnHostResolved not called for 127.0.0.1; got %v", hostPTR)
+	}
+	if len(ptr) != 1 || ptr[0] != "localhost" {
+		t.Fatalf("OnHostResolved ptr = %v, want [localhost]", ptr)
+	}
+
+	// Every streamed service carries a scan timestamp.
+	if svcCount == 0 || timed != svcCount {
+		t.Fatalf("CheckedAt set on %d/%d services, want all", timed, svcCount)
+	}
+	for _, tr := range res.Targets {
+		for _, svc := range tr.Services {
+			if svc.CheckedAt.IsZero() || svc.CheckedAt.Before(before) {
+				t.Errorf("service %s:%d CheckedAt %v not within the scan window (>= %v)",
+					svc.Host, svc.Port, svc.CheckedAt, before)
+			}
+		}
+	}
+}
+
+func TestOnHostResolvedSkippedWithoutResolveDNS(t *testing.T) {
+	t.Setenv("NO_PROXY", "*")
+	ts := phpTestServer()
+	defer ts.Close()
+
+	called := false
+	_, err := Scan(context.Background(), []string{ts.URL}, Options{
+		Mode: ModeDetect, TLSMode: TLSOff, Timeout: 3 * time.Second,
+		Resolver:       fakeDNS{ptr: map[string][]string{"127.0.0.1": {"localhost"}}},
+		OnHostResolved: func(string, []string, []string) { called = true },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Error("OnHostResolved fired without ResolveDNS enabled")
+	}
+}

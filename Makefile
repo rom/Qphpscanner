@@ -117,6 +117,41 @@ dist:
 			-o dist/$(BINARY)-$$os-$$arch$$ext $(CMD); \
 	done
 
+## release: cross-compile, archive and checksum release artifacts into dist/
+.PHONY: release
+release:
+	@rm -rf dist
+	@mkdir -p dist
+	@echo "packaging $(BINARY) $(VERSION)"
+	@for target in \
+		linux/amd64 linux/arm64 \
+		darwin/amd64 darwin/arm64 \
+		windows/amd64 windows/arm64; do \
+		os=$${target%/*}; arch=$${target#*/}; \
+		ext=""; [ "$$os" = "windows" ] && ext=".exe"; \
+		name="$(BINARY)-$(VERSION)-$$os-$$arch"; \
+		staging="dist/$$name"; \
+		mkdir -p "$$staging"; \
+		echo "  building $$os/$$arch"; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" \
+			-o "$$staging/$(BINARY)$$ext" $(CMD) || exit 1; \
+		for extra in README.md LICENSE docs/CHANGELOG.md docs/$(BINARY).1; do \
+			[ -f "$$extra" ] && cp "$$extra" "$$staging/" || true; \
+		done; \
+		if [ "$$os" = "windows" ] && command -v zip >/dev/null 2>&1; then \
+			( cd dist && zip -qr "$$name.zip" "$$name" ); \
+		else \
+			tar -czf "dist/$$name.tar.gz" -C dist "$$name"; \
+		fi; \
+		rm -rf "$$staging"; \
+	done
+	@echo "  writing SHA256SUMS"
+	@( cd dist && \
+		if command -v sha256sum >/dev/null 2>&1; then sha256sum *.tar.gz *.zip; \
+		else shasum -a 256 *.tar.gz *.zip; fi 2>/dev/null > SHA256SUMS ) || true
+	@echo "release artifacts in dist/:"
+	@ls -1 dist
+
 ## clean: remove build artifacts
 .PHONY: clean
 clean:

@@ -24,6 +24,7 @@ const downloadsEl = $("downloads");
 const progressEl = $("progress");
 const progressFill = $("progress-fill");
 const progressText = $("progress-text");
+const progressTime = $("progress-time");
 const progressLog = $("progress-log");
 const historyWrap = $("history-wrap");
 const historyEl = $("history");
@@ -136,6 +137,7 @@ const splitList = (s) =>
     .filter((x) => x && !x.startsWith("#"));
 
 document.addEventListener("DOMContentLoaded", refreshHistory);
+document.addEventListener("DOMContentLoaded", showVersion);
 $("cmp-run") && $("cmp-run").addEventListener("click", runCompare);
 $("cmp-refresh") && $("cmp-refresh").addEventListener("click", refreshCompareList);
 wireCompareUpload();
@@ -219,6 +221,8 @@ async function runScan() {
             logLine(line);
           }
         }
+      } else if (msg.type === "host") {
+        onHostMsg(msg);
       } else if (msg.type === "service") {
         onServiceMsg(msg.service);
       } else if (msg.type === "result") {
@@ -270,11 +274,20 @@ async function runScan() {
 
 /* ---------- progress ---------- */
 
+let scanStartMs = 0;
+let elapsedTimer = null;
+
 function startProgress() {
   progressEl.classList.remove("hidden");
   progressFill.style.width = "0%";
   progressText.textContent = "Starting…";
   progressLog.replaceChildren();
+  scanStartMs = Date.now();
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  updateTimeLine(false);
+  // Tick the elapsed time once a second so "running" advances even while the
+  // scan is grinding through closed ports with no progress events.
+  elapsedTimer = setInterval(() => updateTimeLine(false), 1000);
 }
 
 function updateProgress(ev, openCount, phpCount) {
@@ -284,8 +297,36 @@ function updateProgress(ev, openCount, phpCount) {
     `probed ${ev.done}/${ev.total} (${pct}%) · open ${openCount} · PHP ${phpCount}`;
 }
 
+// updateTimeLine shows when the scan started, how long it has run, and (once
+// finished) when it ended.
+function updateTimeLine(ended) {
+  if (!progressTime) return;
+  const started = new Date(scanStartMs);
+  const elapsed = Math.max(0, Date.now() - scanStartMs);
+  if (ended) {
+    progressTime.textContent =
+      `Started ${started.toLocaleTimeString()} · took ${fmtDuration(elapsed)} · ended ${new Date().toLocaleTimeString()}`;
+  } else {
+    progressTime.textContent =
+      `Started ${started.toLocaleTimeString()} · running ${fmtDuration(elapsed)}`;
+  }
+}
+
 function finishProgress() {
-  setTimeout(() => progressEl.classList.add("hidden"), 600);
+  if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+  // Leave the bar and its timestamps on screen (showing the finished state and
+  // end time) until the next scan resets them.
+  updateTimeLine(true);
+}
+
+// fmtDuration renders a millisecond span as a compact "1h 2m 3s" string.
+function fmtDuration(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + "m " + (s % 60) + "s";
+  const h = Math.floor(m / 60);
+  return h + "h " + (m % 60) + "m " + (s % 60) + "s";
 }
 
 function logLine(text) {
@@ -311,6 +352,12 @@ let scanRender = null;
 
 let sortMode = "scan";
 
+// RENDER_CAP bounds how many service cards each bucket draws in the live view.
+// Long scans can produce thousands of (mostly closed-port) results; drawing
+// them all makes the page hang. The full set is always available via download;
+// beyond the cap the live view shows a running "+N more" note.
+const RENDER_CAP = 1000;
+
 function beginScanRender() {
   activeFilter = null;
   scanRender = {
@@ -319,7 +366,23 @@ function beginScanRender() {
     phpList: [],
     failList: [],
     hostDNS: {},
+    okGroups: new Map(),
+    failGroups: new Map(),
+    okState: { shown: 0, hidden: 0, note: null },
+    failState: { shown: 0, hidden: 0, note: null },
+    // Once the user picks a non-default sort or a summary filter, the live
+    // incremental append no longer matches the chosen view, so switch to
+    // coalesced full re-renders for the Results tab.
+    okRebuildMode: false,
   };
+}
+
+// onHostMsg records a host's resolved DNS. It arrives before that host's
+// service results, so cards rendered afterwards pick up the A/PTR records —
+// which is how an IP target shows its resolved hostname while the scan runs.
+function onHostMsg(msg) {
+  if (!msg || !msg.host || !scanRender) return;
+  scanRender.hostDNS[msg.host] = { addresses: msg.addresses || [], ptr: msg.ptr || [] };
 }
 
 // isPHPResult marks a service classified as PHP (any positive verdict).
@@ -344,6 +407,11 @@ function ensureCleared() {
   scanRender.okList = [];
   scanRender.phpList = [];
   scanRender.failList = [];
+  scanRender.okGroups = new Map();
+  scanRender.failGroups = new Map();
+  scanRender.okState = { shown: 0, hidden: 0, note: null };
+  scanRender.failState = { shown: 0, hidden: 0, note: null };
+  scanRender.okRebuildMode = false;
   resultTabsEl.classList.remove("hidden");
   updateResultCounts();
 }
@@ -360,16 +428,85 @@ function onServiceMsg(svc) {
   ensureCleared();
   if (isProductive(svc)) {
     scanRender.okList.push(svc);
-    renderResultsTab();
-    if (isPHPResult(svc)) {
-      scanRender.phpList.push(svc);
-      renderBucket(phpResultsEl, scanRender.phpList, sortMode);
-    }
+    if (isPHPResult(svc)) scanRender.phpList.push(svc);
+    liveRenderOK(svc);
   } else {
     scanRender.failList.push(svc);
-    renderBucket(failuresEl, scanRender.failList, "scan");
+    liveRenderFail(svc);
   }
   updateResultCounts();
+}
+
+// liveRenderOK adds one productive service to the Results (and PHP) tabs without
+// rebuilding the whole list. In the default view (scan order, no filter) it
+// appends incrementally; once the user picks a different sort or a summary
+// filter, it falls back to a coalesced full re-render (cheap because the
+// productive list is small relative to closed ports).
+function liveRenderOK(svc) {
+  if (!scanRender.okRebuildMode && sortMode === "scan" && !activeFilter) {
+    liveAppendCard(resultsEl, scanRender.okGroups, svc, scanRender.okState);
+  } else {
+    dirtyOK = true;
+  }
+  if (isPHPResult(svc)) dirtyPHP = true;
+  if (dirtyOK || dirtyPHP) scheduleRender();
+}
+
+// liveRenderFail appends a failed/closed/non-HTTP service to the Failures tab.
+// Failures are always scan-order host-grouped, so they append incrementally.
+function liveRenderFail(svc) {
+  liveAppendCard(failuresEl, scanRender.failGroups, svc, scanRender.failState);
+}
+
+// liveAppendCard appends one service card to a host-grouped container, creating
+// the host header lazily and respecting the render cap. Cards beyond the cap
+// are summarised in a running note instead of bloating the DOM.
+function liveAppendCard(container, groups, svc, state) {
+  if (state.shown >= RENDER_CAP) {
+    state.hidden++;
+    updateCapNote(container, state);
+    return;
+  }
+  let g = groups.get(svc.host);
+  if (!g) {
+    g = renderHostHeader(svc.host);
+    groups.set(svc.host, g);
+    container.appendChild(g.el);
+  }
+  g.body.appendChild(renderService(svc, dnsFor(svc)));
+  state.shown++;
+}
+
+function updateCapNote(container, state) {
+  if (!state.note) {
+    state.note = el("p", "cap-note", "");
+    container.appendChild(state.note);
+  }
+  state.note.textContent =
+    `+${state.hidden} more not shown (live view capped at ${RENDER_CAP}). ` +
+    `Download the scan for the full list.`;
+}
+
+// Coalesced re-render used when incremental append cannot be applied (a chosen
+// sort/filter). Dirty flags are batched into one animation frame so a burst of
+// streamed services triggers at most one rebuild per frame.
+let dirtyOK = false;
+let dirtyPHP = false;
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  const run = () => {
+    renderQueued = false;
+    if (!scanRender || scanRender.pendingClear) {
+      dirtyOK = dirtyPHP = false;
+      return;
+    }
+    if (dirtyOK) { dirtyOK = false; renderResultsTab(); }
+    if (dirtyPHP) { dirtyPHP = false; renderBucket(phpResultsEl, scanRender.phpList, sortMode); }
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+  else setTimeout(run, 16);
 }
 
 // renderBucket (re)draws a container from its service array. "scan" order
@@ -390,12 +527,20 @@ function renderBucket(container, list, mode) {
         return a.i - b.i;
       })
       .map((x) => x.s);
-    for (const svc of ordered) container.appendChild(renderService(svc, dnsFor(svc)));
+    let n = 0;
+    for (const svc of ordered) {
+      if (n >= RENDER_CAP) break;
+      container.appendChild(renderService(svc, dnsFor(svc)));
+      n++;
+    }
+    if (ordered.length > RENDER_CAP) container.appendChild(bucketCapNote(ordered.length - RENDER_CAP));
     return;
   }
   // scan order, grouped by host
   const groups = new Map();
+  let n = 0;
   for (const svc of list) {
+    if (n >= RENDER_CAP) break;
     let g = groups.get(svc.host);
     if (!g) {
       g = renderHostHeader(svc.host);
@@ -403,7 +548,17 @@ function renderBucket(container, list, mode) {
       container.appendChild(g.el);
     }
     g.body.appendChild(renderService(svc, dnsFor(svc)));
+    n++;
   }
+  if (list.length > RENDER_CAP) container.appendChild(bucketCapNote(list.length - RENDER_CAP));
+}
+
+function bucketCapNote(hidden) {
+  return el(
+    "p",
+    "cap-note",
+    `+${hidden} more not shown (capped at ${RENDER_CAP}). Download the scan for the full list.`
+  );
 }
 
 function renderHostHeader(host) {
@@ -424,6 +579,9 @@ function updateResultCounts() {
 // changes.
 function resortResults() {
   if (!scanRender || scanRender.pendingClear) return;
+  // A non-scan sort reorders results, so incremental append can no longer be
+  // used for the rest of the stream — switch to coalesced full re-renders.
+  scanRender.okRebuildMode = true;
   renderResultsTab();
   renderBucket(phpResultsEl, scanRender.phpList, sortMode);
 }
@@ -517,6 +675,8 @@ function renderSummary(s) {
 // toggleFilter applies/clears a summary-tile filter on the Results tab.
 function toggleFilter(label) {
   activeFilter = activeFilter === label ? null : label;
+  // A filtered Results tab is a full subset render, not an incremental append.
+  if (scanRender) scanRender.okRebuildMode = true;
   for (const t of summaryEl.querySelectorAll(".stat-click")) {
     t.classList.toggle("active", t.dataset.filter === activeFilter);
   }
@@ -594,6 +754,9 @@ function renderService(svc, target) {
     kv.appendChild(el("dt", null, k));
     kv.appendChild(el("dd", null, String(v)));
   };
+
+  // When this endpoint was probed (skip the Go zero time of old checkpoints).
+  if (svc.checked_at && !svc.checked_at.startsWith("0001")) add("Scanned", fmtClock(svc.checked_at));
 
   if (!svc.port_open) {
     add("Port", "closed/filtered");
@@ -827,6 +990,29 @@ function formatTime(iso) {
   return dt.toLocaleString();
 }
 
+// fmtClock renders a timestamp as a local wall-clock time (per-result label).
+function fmtClock(iso) {
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return iso;
+  return dt.toLocaleTimeString();
+}
+
+// showVersion fetches the build version and shows it in the page footer.
+async function showVersion() {
+  const elv = $("app-version");
+  if (!elv) return;
+  try {
+    const resp = await fetch("api/version");
+    if (!resp.ok) return;
+    const v = await resp.json();
+    let txt = (v.name || "qphpscanner") + " " + (v.version || "");
+    if (v.commit && v.commit !== "none" && v.commit !== "dev") txt += " (" + v.commit + ")";
+    elv.textContent = txt.trim();
+  } catch (_) {
+    /* version is cosmetic; ignore failures */
+  }
+}
+
 /* ---------- helpers ---------- */
 
 function evSev(tier) {
@@ -1007,6 +1193,9 @@ function renderStats(ov) {
   pies.appendChild(pieChart("Services by PHP verdict", breakdownSlices(s.verdict_breakdown, VERDICT_ORDER, verdictColor)));
   body.appendChild(pies);
 
+  // PHP presence split across ports (e.g. http/80 vs https/443).
+  body.appendChild(barChart("PHP services by port", mapToRows(s.php_by_port), (r) => portColor(r.key)));
+
   // Bar charts: toplists.
   body.appendChild(barChart("Top vulnerabilities", s.top_vulns, (r) => sevColor(r.severity)));
   body.appendChild(barChart("Top applications", s.top_apps, () => CHART_ACCENT));
@@ -1036,6 +1225,21 @@ function verdictColor(v) {
     case "possible": return "#ffd166";
     default: return "#64748b";
   }
+}
+// portColor tints a port/scheme bar by its scheme (HTTPS teal, HTTP violet).
+function portColor(key) {
+  const k = (key || "").toLowerCase();
+  if (k.startsWith("https")) return CHART_ACCENT2;
+  if (k.startsWith("http")) return CHART_ACCENT;
+  return "#94a3b8";
+}
+
+// mapToRows turns a {key:count} object into bar-chart rows sorted by count.
+function mapToRows(m) {
+  m = m || {};
+  return Object.keys(m)
+    .map((k) => ({ key: k, count: m[k] }))
+    .sort((a, b) => (b.count - a.count) || (a.key < b.key ? -1 : 1));
 }
 
 // breakdownSlices turns a {key:count} map into ordered pie slices.

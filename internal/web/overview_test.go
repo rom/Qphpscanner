@@ -98,6 +98,31 @@ func TestOverviewAndDiff(t *testing.T) {
 	}
 }
 
+func TestVersionEndpoint(t *testing.T) {
+	s := NewServer("x")
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	var v map[string]string
+	if code := getJSON(t, srv.URL+"/api/version", &v); code != 200 {
+		t.Fatalf("version status %d", code)
+	}
+	if v["name"] == "" || v["version"] == "" {
+		t.Errorf("version payload incomplete: %+v", v)
+	}
+
+	// Wrong method on a known endpoint is a clean 405, not an opaque file-server
+	// response.
+	resp, err := http.Post(srv.URL+"/api/version", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 405 {
+		t.Errorf("POST /api/version => %d, want 405", resp.StatusCode)
+	}
+}
+
 func TestScanBlockListDropsTarget(t *testing.T) {
 	target := phpTarget()
 	defer target.Close()
@@ -188,6 +213,18 @@ func TestOverviewBreakdownsAndUploadDiff(t *testing.T) {
 	}
 	if len(ov.Stats.SeverityBreakdown) == 0 {
 		t.Errorf("severity_breakdown empty: %+v", ov.Stats.SeverityBreakdown)
+	}
+	// PHP-per-port breakdown is keyed by scheme/port and totals the PHP services.
+	if len(ov.Stats.PHPByPort) == 0 {
+		t.Errorf("php_by_port empty: %+v", ov.Stats.PHPByPort)
+	} else {
+		total := 0
+		for _, n := range ov.Stats.PHPByPort {
+			total += n
+		}
+		if total != ov.Stats.PHPServices {
+			t.Errorf("php_by_port totals %d, want php_services %d (%+v)", total, ov.Stats.PHPServices, ov.Stats.PHPByPort)
+		}
 	}
 
 	// Download the scan as JSON, then diff that uploaded file against the
