@@ -260,6 +260,9 @@ func renderPHP(d *document, det *php.Detection) {
 			if ev.Probe != "" {
 				meta += "; probe: " + ev.Probe
 			}
+			if ev.Status > 0 {
+				meta += fmt.Sprintf("; HTTP %d", ev.Status)
+			}
 			if ev.Pattern != "" {
 				meta += "; matcher: " + collapse(ev.Pattern)
 			}

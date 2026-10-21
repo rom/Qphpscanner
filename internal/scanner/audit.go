@@ -376,6 +376,9 @@ func logEvidence(w io.Writer, ev php.Evidence) {
 	if ev.Probe != "" {
 		fmt.Fprintf(w, "        probe: %s\n", ev.Probe)
 	}
+	if ev.Status > 0 {
+		fmt.Fprintf(w, "        http status: %d\n", ev.Status)
+	}
 	if ev.Pattern != "" {
 		fmt.Fprintf(w, "        matcher: %s\n", collapseSpace(ev.Pattern))
 	}

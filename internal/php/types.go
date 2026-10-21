@@ -48,6 +48,9 @@ type Evidence struct {
 	Line int `json:"line,omitempty"`
 	// Probe is the request (method + URL) whose response produced the match.
 	Probe string `json:"probe,omitempty"`
+	// Status is the HTTP response code of the probe that produced the match
+	// (0 when the evidence did not come from an HTTP response).
+	Status int `json:"status,omitempty"`
 }
 
 // confidenceTier maps a signal weight to a low/medium/high label.

@@ -200,7 +200,11 @@ toggles), shows a **progress bar and live feed** while scanning (with a
 colour-coded PHP verdicts, evidence and vulnerability leads, and keeps
 **previous scans below the current one as collapsible, server-persisted
 entries** — each with its own download links. Downloads cover JSON, XML, CSV,
-SARIF, text, HTML, RTF and PDF.
+SARIF, text, HTML, RTF and PDF, named uniquely with the scan's timestamp.
+
+The targets box supports **bulk loading from a file** ("Load from file…"):
+one or more local lists are read in the browser (nothing is uploaded) and
+their lines appended, with `#` comments and blanks skipped.
 
 Protect the GUI with `--web-auth user:pass` (HTTP Basic auth). It is bound to
 localhost by default; exposing it to a network makes a scan trigger available

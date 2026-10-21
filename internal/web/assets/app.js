@@ -31,6 +31,45 @@ cancelBtn.addEventListener("click", () => {
   if (controller) controller.abort();
 });
 
+// Bulk-load a target list from one or more local files (read client-side; the
+// file never leaves the browser). Lines are appended to the targets box with
+// '#' comments and blank lines stripped.
+const targetsFileEl = $("targets-file");
+if (targetsFileEl) {
+  targetsFileEl.addEventListener("change", async () => {
+    const files = Array.from(targetsFileEl.files || []);
+    if (!files.length) return;
+    let added = 0;
+    for (const file of files) {
+      let text = "";
+      try {
+        text = await file.text();
+      } catch (_) {
+        setStatus("Could not read " + file.name, true);
+        continue;
+      }
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith("#"));
+      if (!lines.length) continue;
+      const box = $("targets");
+      const existing = box.value.trim();
+      box.value = (existing ? existing + "\n" : "") + lines.join("\n");
+      added += lines.length;
+    }
+    setStatus(added ? `Loaded ${added} target(s) from file.` : "No targets found in file.");
+    targetsFileEl.value = ""; // allow re-loading the same file
+  });
+}
+const targetsClearEl = $("targets-clear");
+if (targetsClearEl) {
+  targetsClearEl.addEventListener("click", () => {
+    $("targets").value = "";
+    setStatus("");
+  });
+}
+
 document.addEventListener("DOMContentLoaded", refreshHistory);
 
 async function runScan() {
@@ -367,6 +406,7 @@ function renderEvidence(evidence) {
     if (ev.where) meta.push("where: " + ev.where);
     if (ev.how) meta.push("how: " + ev.how);
     if (ev.probe) meta.push("probe: " + ev.probe);
+    if (ev.status) meta.push("HTTP " + ev.status);
     if (ev.pattern) meta.push("matcher: " + ev.pattern);
     if (ev.line) meta.push("line " + ev.line);
     if (meta.length) li.appendChild(el("div", "ev-meta", meta.join(" · ")));
