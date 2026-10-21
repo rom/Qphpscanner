@@ -59,8 +59,18 @@ version-based vulnerabilities**. It never attempts to exploit anything.
 - **Vulnerability leads** (deep mode): a curated, version-correlated catalogue
   of ~40 PHP-core CVEs plus famous CMS-core CVEs (CVE-2024-4577,
   CVE-2019-11043, CVE-2012-1823, Drupalgeddon2, …), **extensible with external
-  feeds** (`--vuln-feed file|URL`). Leads are informational — correlated from
-  the detected version, not confirmed by exploitation.
+  feeds** (`--vuln-feed file|URL`) in the native schema **or standard OSV and
+  CSAF 2.0** documents (auto-detected). Leads are informational — correlated
+  from the detected version, not confirmed by exploitation.
+- **Favicon/asset hash catalogue**: matches a site's mmh3 favicon hash against
+  a built-in product map (phpMyAdmin, Adminer, WordPress, Joomla, Drupal,
+  phpBB, Roundcube, Zabbix, GLPI, …), extensible with `--favicon-catalog`.
+- **HTTP/2 + ALPN awareness**: negotiates HTTP/2 via ALPN and records the
+  negotiated protocol, plus cleartext-h2c (`Upgrade: h2c`) advertisement.
+- **Broad PHP evidence**: ~70 application/framework/addon cookies and headers,
+  dozens of PHP runtime-quirk and error-message body signatures, and exposure
+  probes (`.env`, Symfony profiler, Laravel Telescope/Horizon, PHP-FPM status,
+  Nextcloud status).
 - **security.txt** (RFC 9116): discovers and parses `/.well-known/security.txt`
   and surfaces it in every output and report.
 - **Flexible targets**: single URL, IPv4/IPv6 literal, CIDR block, dashed
@@ -77,7 +87,8 @@ version-based vulnerabilities**. It never attempts to exploit anything.
 - **Request shaping**: custom headers, Basic/Bearer/cookie **auth**, **vhost**
   (Host header) scanning, and an http(s)/**SOCKS5** proxy.
 - **Politeness**: global **rate limiting** (`--rate`), per-host concurrency,
-  jitter, and retries with backoff.
+  **host-level concurrency** (`--host-concurrency`, cap distinct hosts scanned
+  at once), jitter, and retries with backoff.
 - **Resume**: checkpoint completed services and continue an interrupted scan
   (`--resume`).
 - **Audit trail**: save a **libpcap capture** of every HTTP exchange as a TCP
@@ -93,7 +104,10 @@ version-based vulnerabilities**. It never attempts to exploit anything.
   written by hand — see below).
 - **Scan diffing** (`--diff`) and **severity exit codes** (`--fail-on`) for
   monitoring and CI gating.
-- **YAML config file** support.
+- **YAML config file** support with **full CLI parity** — every option
+  (politeness, enrichment, auth/headers, feeds, audit trail, …) is settable
+  from the config, with flags overriding it.
+- **Shell completions** for bash, zsh and fish (`--completion <shell>`).
 - **CLI *and* a web GUI** with live progress, a cancel button, optional Basic
   auth, and a persistent, collapsible history of previous scans with per-scan
   downloads.
@@ -175,7 +189,11 @@ qphpscanner --config scan.yaml
 | `--resume FILE` | checkpoint/resume a scan |
 | `--pcap FILE` | write a libpcap capture of every HTTP exchange (audit trail) |
 | `--log FILE` | write a session log explaining each detection decision |
-| `--config FILE` | load a YAML config |
+| `--vuln-feed F\|URL` | merge a native, OSV or CSAF vuln feed (repeatable) |
+| `--favicon-catalog F\|URL` | merge a favicon-hash → product catalogue (repeatable) |
+| `--host-concurrency N` | cap distinct hosts scanned at once |
+| `--completion SHELL` | print a bash/zsh/fish completion script |
+| `--config FILE` | load a YAML config (full CLI parity) |
 | `--web` / `--listen` / `--web-auth u:p` | run the web GUI / address / Basic auth |
 | `--version` | print version |
 

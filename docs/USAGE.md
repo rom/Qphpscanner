@@ -173,7 +173,11 @@ printed to stderr when the scan finishes.
 
 ## Configuration file
 
-`--config FILE` loads settings from a small YAML file. See
+`--config FILE` loads settings from a small YAML file. It has **full parity**
+with the command line: every option — politeness (including
+`host_concurrency`), enrichment, auth/headers (a list or a map), vulnerability
+feeds, favicon catalogues, the audit trail (`pcap`/`log`) and `web.auth` — is
+settable from the config. See
 [`../config.example.yaml`](../config.example.yaml) for the full annotated
 schema. Precedence, highest first:
 
@@ -258,7 +262,45 @@ and `/nginx_status`). Every signal carries a confidence tier (low/medium/high).
 
 Deep mode correlates versions against the built-in catalogue. Merge extra data
 with `--vuln-feed FILE|URL` (repeatable); feeds override EOL dates by branch.
-See [`vuln-feed.example.json`](vuln-feed.example.json) for the schema.
+Three formats are auto-detected:
+
+- the native `qphpscanner-vuln-feed/1` schema (see
+  [`vuln-feed.example.json`](vuln-feed.example.json)),
+- **OSV** records (a single object or a JSON array) — e.g. osv.dev / GitHub
+  advisory exports for Packagist packages,
+- **CSAF 2.0** advisories — vendor security documents (TYPO3, Drupal, …).
+
+PHP-core advisories feed the PHP correlation; everything else is keyed by a
+normalised framework/package name (drupal, wordpress, laravel, …).
+
+## Favicon catalogue
+
+In deep mode the site favicon's mmh3 hash is matched against a built-in
+product catalogue and, on a hit, attributes the product and adds evidence.
+Extend or override it with `--favicon-catalog FILE|URL` (repeatable); the file
+is `{"schema":"qphpscanner-favicon-catalog/1","favicons":[{"hash":"…",
+"product":"…","framework":"…","php":true}]}`. An unknown hash is simply inert.
+
+## Host and service concurrency
+
+`--concurrency` caps total in-flight service probes; `--per-host-concurrency`
+caps probes against one host; `--host-concurrency` caps how many distinct hosts
+are worked at once (0 = no host cap). Combine them to sweep large target sets
+politely — e.g. `--host-concurrency 10 --per-host-concurrency 2`.
+
+## Shell completions
+
+`--completion bash|zsh|fish` prints a completion script generated from the live
+flag set:
+
+```sh
+# bash
+source <(qphpscanner --completion bash)
+# zsh (into a directory on $fpath)
+qphpscanner --completion zsh > ~/.zfunc/_qphpscanner
+# fish
+qphpscanner --completion fish > ~/.config/fish/completions/qphpscanner.fish
+```
 
 ## Diffing scans
 

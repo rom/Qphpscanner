@@ -46,6 +46,16 @@ func DeepProbePaths() []string {
 		// project; vendor/autoload.php often leaks source when not executed.
 		"/vendor/composer/installed.json",
 		"/vendor/autoload.php",
+		// Framework debug/dev endpoints and exposed secrets (read-only GETs).
+		"/.env",
+		"/app_dev.php",
+		"/web/app_dev.php",
+		"/_profiler/",
+		"/telescope",
+		"/horizon",
+		"/status.php",
+		"/xmlrpc.php",
+		"/wp-json/",
 	}
 }
 

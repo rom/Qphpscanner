@@ -63,6 +63,10 @@ type Options struct {
 	RateLimit float64
 	// PerHostConcurrency caps concurrent service probes per host (0 = unlimited).
 	PerHostConcurrency int
+	// HostConcurrency caps how many distinct hosts are scanned at once
+	// (0 = no host-level cap). Service probes are still bounded globally by
+	// Concurrency and per host by PerHostConcurrency.
+	HostConcurrency int
 	// Jitter adds a random delay of up to this duration before each service.
 	Jitter time.Duration
 	// Retries is the number of extra attempts on a transient network error.
@@ -215,50 +219,89 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 	}
 	defer cp.close()
 
-	// Per-host concurrency gate.
+	// Per-host service-concurrency gate.
 	hostGate := newHostGate(opts.PerHostConcurrency)
 
-	// Worker pool.
+	// Group job indices by host so hosts can be scheduled independently.
+	jobsByHost := map[string][]int{}
+	for i, j := range jobs {
+		jobsByHost[j.ep.Host] = append(jobsByHost[j.ep.Host], i)
+	}
+
+	// Two levels of concurrency: a host-level cap on how many distinct hosts
+	// are worked at once, and a global cap on concurrent service probes across
+	// all of them. HostConcurrency 0 means "no host-level cap".
 	results := make([]ServiceResult, len(jobs))
 	total := len(jobs)
 	sem := make(chan struct{}, opts.Concurrency)
+	hostConc := opts.HostConcurrency
+	if hostConc <= 0 || hostConc > len(hostOrder) {
+		hostConc = len(hostOrder)
+	}
+	if hostConc < 1 {
+		hostConc = 1
+	}
+	hostSem := make(chan struct{}, hostConc)
+
 	var wg sync.WaitGroup
 	var progMu sync.Mutex
 	doneCount := 0
-	for i := range jobs {
+
+	runJob := func(idx int) {
+		j := jobs[idx]
+		k := jobKey(j.ep.Host, j.port)
+		var res ServiceResult
+		if saved, ok := cp.lookup(k); ok {
+			res = saved
+			audit.logResumed(res)
+		} else {
+			hostGate.acquire(j.ep.Host)
+			applyJitter(ctx, opts.Jitter)
+			res = scanService(ctx, fetcher, j, opts)
+			hostGate.release(j.ep.Host)
+			cp.record(res)
+			audit.logService(res)
+		}
+		results[idx] = res
+		if opts.OnProgress != nil {
+			progMu.Lock()
+			doneCount++
+			opts.OnProgress(serviceEvent(res, doneCount, total))
+			progMu.Unlock()
+		}
+	}
+
+	for _, host := range hostOrder {
 		select {
 		case <-ctx.Done():
+			wg.Wait()
 			return nil, ctx.Err()
 		default:
 		}
+		hostSem <- struct{}{}
 		wg.Add(1)
-		sem <- struct{}{}
-		go func(idx int) {
+		go func(host string) {
 			defer wg.Done()
-			defer func() { <-sem }()
+			defer func() { <-hostSem }()
 
-			j := jobs[idx]
-			k := jobKey(j.ep.Host, j.port)
-			var res ServiceResult
-			if saved, ok := cp.lookup(k); ok {
-				res = saved
-				audit.logResumed(res)
-			} else {
-				hostGate.acquire(j.ep.Host)
-				applyJitter(ctx, opts.Jitter)
-				res = scanService(ctx, fetcher, j, opts)
-				hostGate.release(j.ep.Host)
-				cp.record(res)
-				audit.logService(res)
+			var hwg sync.WaitGroup
+			for _, idx := range jobsByHost[host] {
+				select {
+				case <-ctx.Done():
+					hwg.Wait()
+					return
+				default:
+				}
+				sem <- struct{}{}
+				hwg.Add(1)
+				go func(idx int) {
+					defer hwg.Done()
+					defer func() { <-sem }()
+					runJob(idx)
+				}(idx)
 			}
-			results[idx] = res
-			if opts.OnProgress != nil {
-				progMu.Lock()
-				doneCount++
-				opts.OnProgress(serviceEvent(res, doneCount, total))
-				progMu.Unlock()
-			}
-		}(i)
+			hwg.Wait()
+		}(host)
 	}
 	wg.Wait()
 
@@ -544,6 +587,16 @@ func buildHTTPInfo(url string, resp *probe.Response) *HTTPInfo {
 	}
 	if info.FinalURL == url {
 		info.FinalURL = ""
+	}
+	info.HTTP2 = strings.HasPrefix(resp.Proto, "HTTP/2")
+	if resp.TLS != nil {
+		info.ALPN = resp.TLS.ALPN
+	}
+	// Cleartext HTTP/2 (h2c) advertised via an Upgrade header.
+	for _, up := range resp.HeaderValues("Upgrade") {
+		if strings.Contains(strings.ToLower(up), "h2c") {
+			info.H2C = true
+		}
 	}
 	if m := reTitle.FindStringSubmatch(resp.BodyString()); m != nil {
 		info.Title = strings.TrimSpace(collapseSpace(m[1]))

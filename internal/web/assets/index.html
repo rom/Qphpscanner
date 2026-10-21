@@ -66,7 +66,17 @@
             <label class="check"><input type="checkbox" id="securitytxt" checked> Fetch security.txt</label>
             <label class="check"><input type="checkbox" id="insecure"> Ignore TLS errors</label>
             <label class="check"><input type="checkbox" id="includeclosed"> Show closed ports</label>
+            <label class="check"><input type="checkbox" id="resolvedns"> Resolve DNS (A/PTR)</label>
+            <label class="check"><input type="checkbox" id="banners"> Grab service banners</label>
           </div>
+        </div>
+
+        <div class="grid2">
+          <div>
+            <label for="hostconc">Host concurrency</label>
+            <input id="hostconc" type="number" min="0" max="500" value="0" title="0 = no host-level cap">
+          </div>
+          <div></div>
         </div>
 
         <div class="btn-row">
@@ -82,14 +92,14 @@
         <h2>Results</h2>
         <div id="downloads" class="downloads hidden">
           <span>Download:</span>
-          <a href="/api/download?format=json">JSON</a>
-          <a href="/api/download?format=xml">XML</a>
-          <a href="/api/download?format=csv">CSV</a>
-          <a href="/api/download?format=sarif">SARIF</a>
-          <a href="/api/download?format=text">Text</a>
-          <a href="/api/download?format=html">HTML</a>
-          <a href="/api/download?format=rtf">RTF</a>
-          <a href="/api/download?format=pdf">PDF</a>
+          <a href="api/download?format=json">JSON</a>
+          <a href="api/download?format=xml">XML</a>
+          <a href="api/download?format=csv">CSV</a>
+          <a href="api/download?format=sarif">SARIF</a>
+          <a href="api/download?format=text">Text</a>
+          <a href="api/download?format=html">HTML</a>
+          <a href="api/download?format=rtf">RTF</a>
+          <a href="api/download?format=pdf">PDF</a>
         </div>
       </div>
       <div id="progress" class="progress hidden">

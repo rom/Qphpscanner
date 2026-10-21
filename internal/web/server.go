@@ -64,8 +64,56 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/scan", s.handleScan)
 	mux.HandleFunc("GET /api/download", s.handleDownload)
 	mux.HandleFunc("GET /api/history", s.handleHistory)
+	// Any other /api/ request (wrong method, unknown path) gets a clean JSON
+	// error instead of falling through to the file server, whose 404/405 for a
+	// POST is opaque to the GUI.
+	mux.HandleFunc("/api/", s.handleAPIFallback)
 	mux.Handle("/", fileServer)
-	return s.authMiddleware(mux)
+	// CORS/OPTIONS handling wraps auth so a browser preflight (which carries no
+	// credentials) is answered before the auth check, letting the GUI work when
+	// it is served through a reverse proxy or preview on a different origin.
+	return s.corsMiddleware(s.authMiddleware(mux))
+}
+
+// corsMiddleware answers CORS preflight (OPTIONS) requests for the API and adds
+// permissive CORS headers so the GUI works cross-origin (e.g. behind a preview
+// proxy). It only touches /api/ paths; static assets are untouched.
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			if origin := r.Header.Get("Origin"); origin != "" {
+				h := w.Header()
+				h.Set("Access-Control-Allow-Origin", origin)
+				h.Add("Vary", "Origin")
+				h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// handleAPIFallback returns a clear JSON error for an API request that matched
+// no specific route: a 405 (with Allow) when the path is known but the method
+// is wrong, otherwise a 404.
+func (s *Server) handleAPIFallback(w http.ResponseWriter, r *http.Request) {
+	known := map[string]string{
+		"/api/scan":     http.MethodPost,
+		"/api/download": http.MethodGet,
+		"/api/history":  http.MethodGet,
+	}
+	if want, ok := known[r.URL.Path]; ok {
+		w.Header().Set("Allow", want+", OPTIONS")
+		writeJSON(w, http.StatusMethodNotAllowed, streamMsg{Type: "error",
+			Error: fmt.Sprintf("method %s not allowed on %s (use %s)", r.Method, r.URL.Path, want)})
+		return
+	}
+	writeJSON(w, http.StatusNotFound, streamMsg{Type: "error",
+		Error: "unknown API endpoint " + r.URL.Path})
 }
 
 // authMiddleware enforces Basic auth when credentials are configured.
@@ -123,18 +171,21 @@ func (s *Server) ListenAndServe() error {
 }
 
 type scanRequest struct {
-	Targets        []string `json:"targets"`
-	TargetsText    string   `json:"targets_text"`
-	Ports          string   `json:"ports"`
-	Mode           string   `json:"mode"`
-	TLS            string   `json:"tls"`
-	TimeoutSeconds int      `json:"timeout_seconds"`
-	Concurrency    int      `json:"concurrency"`
-	Follow         bool     `json:"follow_redirects"`
-	Insecure       bool     `json:"insecure"`
-	SecurityTxt    bool     `json:"security_txt"`
-	IncludeClosed  bool     `json:"include_closed"`
-	NoDNSEnum      bool     `json:"no_dns_enum"`
+	Targets         []string `json:"targets"`
+	TargetsText     string   `json:"targets_text"`
+	Ports           string   `json:"ports"`
+	Mode            string   `json:"mode"`
+	TLS             string   `json:"tls"`
+	TimeoutSeconds  int      `json:"timeout_seconds"`
+	Concurrency     int      `json:"concurrency"`
+	Follow          bool     `json:"follow_redirects"`
+	Insecure        bool     `json:"insecure"`
+	SecurityTxt     bool     `json:"security_txt"`
+	IncludeClosed   bool     `json:"include_closed"`
+	NoDNSEnum       bool     `json:"no_dns_enum"`
+	ResolveDNS      bool     `json:"resolve_dns"`
+	Banners         bool     `json:"banners"`
+	HostConcurrency int      `json:"host_concurrency"`
 }
 
 // streamMsg is one line of the NDJSON response stream.
@@ -162,6 +213,9 @@ func (s *Server) buildOptions(req scanRequest) (scanner.Options, []string, error
 		IncludeClosed:   req.IncludeClosed,
 		Concurrency:     req.Concurrency,
 		DisableDNSEnum:  req.NoDNSEnum,
+		ResolveDNS:      req.ResolveDNS,
+		GrabBanners:     req.Banners,
+		HostConcurrency: req.HostConcurrency,
 		MaxHostsPerSpec: s.maxTargets,
 	}
 	if req.Ports != "" {
@@ -238,33 +292,33 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	format := strings.ToLower(r.URL.Query().Get("format"))
 	var (
 		ctype string
-		fname string
+		ext   string
 		isOut bool
 	)
 	switch format {
 	case "json":
-		ctype, fname, isOut = "application/json", "qphpscan.json", true
+		ctype, ext, isOut = "application/json", "json", true
 	case "xml":
-		ctype, fname, isOut = "application/xml", "qphpscan.xml", true
+		ctype, ext, isOut = "application/xml", "xml", true
 	case "csv":
-		ctype, fname, isOut = "text/csv; charset=utf-8", "qphpscan.csv", true
+		ctype, ext, isOut = "text/csv; charset=utf-8", "csv", true
 	case "sarif":
-		ctype, fname, isOut = "application/sarif+json", "qphpscan.sarif", true
+		ctype, ext, isOut = "application/sarif+json", "sarif", true
 	case "text", "txt":
-		ctype, fname, isOut = "text/plain; charset=utf-8", "qphpscan.txt", true
+		ctype, ext, isOut = "text/plain; charset=utf-8", "txt", true
 	case "rtf":
-		ctype, fname = "application/rtf", "qphpscan-report.rtf"
+		ctype, ext = "application/rtf", "rtf"
 	case "pdf":
-		ctype, fname = "application/pdf", "qphpscan-report.pdf"
+		ctype, ext = "application/pdf", "pdf"
 	case "html":
-		ctype, fname = "text/html; charset=utf-8", "qphpscan-report.html"
+		ctype, ext = "text/html; charset=utf-8", "html"
 	default:
 		http.Error(w, "unknown format (want json, xml, csv, sarif, text, rtf, pdf or html)", http.StatusBadRequest)
 		return
 	}
 
 	w.Header().Set("Content-Type", ctype)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fname))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", downloadName(res, r.URL.Query().Get("scan"), ext, isOut)))
 
 	var err error
 	if isOut {
@@ -275,6 +329,43 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// downloadName builds a unique, timestamped filename for a downloaded scan:
+// qphpscan-<YYYYMMDD-HHMMSS>[-<scan id>][-report].<ext>. The timestamp is the
+// scan's finish time so every saved file is distinct and traceable to its run.
+func downloadName(res *scanner.ScanResult, scanID, ext string, isOutput bool) string {
+	ts := res.Meta.FinishedAt
+	if ts.IsZero() {
+		ts = res.Meta.StartedAt
+	}
+	if ts.IsZero() {
+		ts = time.Now()
+	}
+	name := "qphpscan-" + ts.Format("20060102-150405")
+	if id := sanitiseID(scanID); id != "" {
+		name += "-" + id
+	}
+	if !isOutput {
+		name += "-report"
+	}
+	return name + "." + ext
+}
+
+// sanitiseID keeps a scan id safe for a filename (it comes from the query).
+func sanitiseID(id string) string {
+	id = strings.TrimSpace(id)
+	var b strings.Builder
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		}
+		if b.Len() >= 40 {
+			break
+		}
+	}
+	return b.String()
 }
 
 // handleHistory lists retained scans (newest first) with light summaries.

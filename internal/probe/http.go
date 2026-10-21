@@ -26,6 +26,9 @@ type TLSInfo struct {
 	ServerName  string   `json:"server_name,omitempty"`
 	PeerCN      string   `json:"peer_cn,omitempty"`
 	PeerDNS     []string `json:"peer_dns,omitempty"`
+	// ALPN is the application protocol negotiated over TLS ("h2",
+	// "http/1.1", or empty when the server did not use ALPN).
+	ALPN string `json:"alpn,omitempty"`
 }
 
 // Response is the aggregated result of fetching a URL, including evidence
@@ -173,7 +176,12 @@ func NewFetcher(cfg FetcherConfig) *Fetcher {
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: cfg.Insecure, //nolint:gosec // opt-in for self-signed scan targets
 			MinVersion:         tls.VersionTLS10,
+			// Offer HTTP/2 via ALPN so the negotiated protocol is observable.
+			NextProtos: []string{"h2", "http/1.1"},
 		},
+		// Attempt HTTP/2 even with a custom dialer/TLS config, so h2-only
+		// origins are reached and the negotiated protocol is recorded.
+		ForceAttemptHTTP2:     true,
 		TLSHandshakeTimeout:   cfg.Timeout,
 		ResponseHeaderTimeout: cfg.Timeout,
 		ExpectContinueTimeout: time.Second,
@@ -443,6 +451,7 @@ func describeTLS(cs *tls.ConnectionState) *TLSInfo {
 		Version:     tlsVersionName(cs.Version),
 		CipherSuite: tls.CipherSuiteName(cs.CipherSuite),
 		ServerName:  cs.ServerName,
+		ALPN:        cs.NegotiatedProtocol,
 	}
 	if len(cs.PeerCertificates) > 0 {
 		leaf := cs.PeerCertificates[0]

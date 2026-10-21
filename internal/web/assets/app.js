@@ -51,6 +51,9 @@ async function runScan() {
     security_txt: $("securitytxt").checked,
     insecure: $("insecure").checked,
     include_closed: $("includeclosed").checked,
+    resolve_dns: $("resolvedns").checked,
+    banners: $("banners").checked,
+    host_concurrency: parseInt($("hostconc").value, 10) || 0,
   };
 
   scanBtn.disabled = true;
@@ -68,7 +71,7 @@ async function runScan() {
   controller = new AbortController();
 
   try {
-    const resp = await fetch("/api/scan", {
+    const resp = await fetch("api/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -261,6 +264,9 @@ function renderService(svc) {
     add("X-Powered-By", h.powered_by);
     add("Title", h.title);
     if (h.tls) add("TLS", h.tls.version + " (" + h.tls.cipher_suite + ")");
+    if (h.http2) add("HTTP version", "HTTP/2 (negotiated)");
+    if (h.alpn) add("ALPN", h.alpn);
+    if (h.h2c) add("h2c", "advertised (cleartext HTTP/2)");
     if (h.final_url) add("Redirected to", h.final_url);
   } else {
     add("HTTP", "no response");
@@ -399,7 +405,7 @@ function renderSecurityTxt(st) {
 
 async function refreshHistory() {
   try {
-    const resp = await fetch("/api/history");
+    const resp = await fetch("api/history");
     if (!resp.ok) return;
     const data = await resp.json();
     const scans = data.scans || [];
@@ -435,7 +441,7 @@ function renderHistoryEntry(scan) {
   dl.appendChild(el("span", null, "Download:"));
   for (const fmt of ["json", "csv", "sarif", "html", "pdf"]) {
     const a = el("a", null, fmt.toUpperCase());
-    a.href = `/api/download?scan=${encodeURIComponent(scan.id)}&format=${fmt}`;
+    a.href = `api/download?scan=${encodeURIComponent(scan.id)}&format=${fmt}`;
     dl.appendChild(a);
   }
   d.appendChild(dl);
@@ -446,7 +452,7 @@ function renderHistoryEntry(scan) {
     if (!d.open || loaded) return;
     loaded = true;
     try {
-      const resp = await fetch(`/api/download?scan=${encodeURIComponent(scan.id)}&format=json`);
+      const resp = await fetch(`api/download?scan=${encodeURIComponent(scan.id)}&format=json`);
       const result = await resp.json();
       body.replaceChildren();
       for (const t of result.targets || []) body.appendChild(renderHost(t));
