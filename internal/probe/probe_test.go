@@ -183,3 +183,96 @@ func TestTLSVersionName(t *testing.T) {
 		t.Fatal("unknown version should hex-format")
 	}
 }
+
+func TestParseResolveRule(t *testing.T) {
+	r, err := ParseResolveRule("example.com:443:203.0.113.10")
+	if err != nil || r.Host != "example.com" || r.Port != 443 || r.Addr != "203.0.113.10" {
+		t.Fatalf("parse v4: %+v err=%v", r, err)
+	}
+	// An IPv6 address keeps its colons.
+	r6, err := ParseResolveRule("example.com:443:2001:db8::1")
+	if err != nil || r6.Addr != "2001:db8::1" {
+		t.Fatalf("parse v6: %+v err=%v", r6, err)
+	}
+	for _, bad := range []string{"", "example.com", "example.com:443", "example.com:nope:1.2.3.4", "example.com::1.2.3.4"} {
+		if _, err := ParseResolveRule(bad); err == nil {
+			t.Errorf("expected error for %q", bad)
+		}
+	}
+}
+
+func TestResolveAddr(t *testing.T) {
+	rules := []ResolveRule{{Host: "example.com", Port: 443, Addr: "203.0.113.10"}}
+	if got := resolveAddr(rules, "example.com:443"); got != "203.0.113.10:443" {
+		t.Errorf("v4 pin = %q", got)
+	}
+	if got := resolveAddr(rules, "example.com:80"); got != "" {
+		t.Errorf("non-matching port should not pin, got %q", got)
+	}
+	// Port 0 matches any port; an IPv6 addr is bracketed with the request port.
+	any := []ResolveRule{{Host: "h", Port: 0, Addr: "2001:db8::1"}}
+	if got := resolveAddr(any, "h:8443"); got != "[2001:db8::1]:8443" {
+		t.Errorf("v6 any-port pin = %q", got)
+	}
+}
+
+func TestResolvePinsDial(t *testing.T) {
+	var gotHost string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHost = r.Host
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer ts.Close()
+	_, portStr, _ := net.SplitHostPort(strings.TrimPrefix(ts.URL, "http://"))
+	port, _ := strconv.Atoi(portStr)
+
+	// "example.test" does not resolve; only the pin makes the request succeed,
+	// and the URL host is preserved in the Host header.
+	f := NewFetcher(FetcherConfig{
+		Timeout: 3 * time.Second,
+		Resolve: []ResolveRule{{Host: "example.test", Port: port, Addr: "127.0.0.1"}},
+	})
+	r := f.Get(context.Background(), "http://example.test:"+portStr+"/")
+	if r.Err != "" {
+		t.Fatalf("pinned fetch error: %s", r.Err)
+	}
+	if r.BodyString() != "ok" {
+		t.Fatalf("body = %q", r.BodyString())
+	}
+	if gotHost != "example.test:"+portStr {
+		t.Errorf("Host header = %q, want example.test:%s", gotHost, portStr)
+	}
+
+	// Without the pin, the unresolvable host fails.
+	f2 := NewFetcher(FetcherConfig{Timeout: time.Second})
+	if r2 := f2.Get(context.Background(), "http://example.test:"+portStr+"/"); r2.Err == "" {
+		t.Error("expected failure without a resolve pin")
+	}
+}
+
+func TestSNIOverride(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := ""
+		if r.TLS != nil {
+			name = r.TLS.ServerName
+		}
+		_, _ = w.Write([]byte(name))
+	}))
+	defer ts.Close()
+
+	// Dialing an IP literal sends no SNI by default (RFC 6066).
+	def := NewFetcher(FetcherConfig{Timeout: 3 * time.Second, Insecure: true})
+	if r := def.Get(context.Background(), ts.URL); r.Err != "" || r.BodyString() != "" {
+		t.Fatalf("default SNI: err=%q body=%q (want empty)", r.Err, r.BodyString())
+	}
+
+	// With an override, the chosen name is sent as SNI.
+	f := NewFetcher(FetcherConfig{Timeout: 3 * time.Second, Insecure: true, SNIServerName: "my.sni.test"})
+	r := f.Get(context.Background(), ts.URL)
+	if r.Err != "" {
+		t.Fatalf("sni fetch error: %s", r.Err)
+	}
+	if r.BodyString() != "my.sni.test" {
+		t.Errorf("server saw SNI %q, want my.sni.test", r.BodyString())
+	}
+}

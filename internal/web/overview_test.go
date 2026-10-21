@@ -127,6 +127,60 @@ func TestOverviewTopServers(t *testing.T) {
 	}
 }
 
+func TestOriginCompare(t *testing.T) {
+	// Edge: a plain, non-PHP page. Origin: a PHP service. Both on loopback;
+	// the origin is reached by pinning the connection to its address.
+	edge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<title>home</title>"))
+	}))
+	defer edge.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Powered-By", "PHP/8.2.0")
+		http.SetCookie(w, &http.Cookie{Name: "PHPSESSID", Value: "x"})
+		_, _ = w.Write([]byte("<title>origin</title>"))
+	}))
+	defer origin.Close()
+
+	s := NewServer("x")
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	originAddr := strings.TrimPrefix(origin.URL, "http://") // 127.0.0.1:PORT
+	body := `{"target":"` + edge.URL + `","origin":"` + originAddr + `","mode":"detect","tls":"off"}`
+	resp, err := http.Post(srv.URL+"/api/origin-compare", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		data, _ := io.ReadAll(resp.Body)
+		t.Fatalf("origin-compare status %d: %s", resp.StatusCode, data)
+	}
+	var out struct {
+		Host       string `json:"host"`
+		OriginAddr string `json:"origin_addr"`
+		Diff       struct {
+			Changed []struct {
+				URL           string `json:"url"`
+				VerdictChange string `json:"verdict_change"`
+			} `json:"changed"`
+			AddedServices []string `json:"added_services"`
+		} `json:"diff"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.OriginAddr != originAddr {
+		t.Errorf("origin_addr = %q, want %q", out.OriginAddr, originAddr)
+	}
+	// The origin reveals PHP where the edge did not: a verdict change on the
+	// shared URL (or, failing that, some recorded difference).
+	changed := len(out.Diff.Changed) > 0
+	if !changed && len(out.Diff.AddedServices) == 0 {
+		t.Fatalf("expected the origin to differ from the edge: %+v", out.Diff)
+	}
+}
+
 func TestVersionEndpoint(t *testing.T) {
 	s := NewServer("x")
 	srv := httptest.NewServer(s.Handler())

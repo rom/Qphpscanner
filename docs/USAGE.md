@@ -264,6 +264,32 @@ To scan applications behind auth or virtual hosts:
 - `--proxy URL` — route all requests through an `http(s)://` or
   `socks5://[user:pass@]host:port` proxy.
 
+Cookies and Basic/Bearer credentials are scoped to the original target host:
+they are not re-sent if a redirect leads to a different host.
+
+## Connection pinning (IP / Host / SNI)
+
+Control the connection target independently of the URL — useful for reaching an
+origin that sits behind a CDN:
+
+- `--resolve HOST:PORT:ADDR` — dial `ADDR` whenever a request would go to
+  `HOST:PORT`, like `curl --resolve`. The URL host is preserved for the Host
+  header and TLS SNI, so a correct origin certificate still verifies. Repeatable.
+- `--sni NAME` — override the TLS SNI server name, independent of the Host
+  header. A name that does not match the presented certificate fails
+  verification unless `--insecure` is set.
+
+In the web GUI these live under **Connection overrides** on the Scan tab, and
+the **Compare** tab has an **Origin check** that scans a target through its
+public edge and again pinned to an operator-supplied origin address, then shows
+what the origin reveals (PHP version, apps, headers, exposed diagnostics).
+
+Example — compare a Cloudflare-fronted site against its origin:
+
+    qphpscanner --mode deep example.com                       # public edge
+    qphpscanner --mode deep --resolve example.com:443:203.0.113.10 \
+                --sni example.com example.com                 # origin
+
 ## Politeness & rate limiting
 
 - `--rate N` — cap outbound HTTP requests to N per second across the whole scan.

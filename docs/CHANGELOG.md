@@ -8,6 +8,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Connection pinning + origin comparison:** `--resolve HOST:PORT:ADDR`
+  (curl-style) dials a specific address while keeping the URL host for the Host
+  header and TLS SNI, and `--sni NAME` overrides the TLS SNI independently — so
+  an origin behind a CDN can be reached directly. The web GUI exposes these as
+  "Connection overrides" and adds an **Origin check** (edge-vs-origin diff) to
+  the Compare tab. Full CLI / YAML / web parity.
 - **Structured `phpinfo()` metadata:** when a phpinfo() page is exposed, the
   observed Server API (e.g. "FPM/FastCGI"), thread-safety, architecture, build
   date, loaded/additional `.ini` paths, security-relevant directive values

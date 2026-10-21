@@ -73,6 +73,19 @@ web:
 	}
 }
 
+func TestResolveAndSNIConfig(t *testing.T) {
+	c, err := loadString(t, "sni: origin.example.com\nresolve:\n  - \"example.com:443:203.0.113.10\"\n  - \"example.com:80:203.0.113.10\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SNI != "origin.example.com" {
+		t.Errorf("sni = %q", c.SNI)
+	}
+	if len(c.Resolve) != 2 || c.Resolve[0] != "example.com:443:203.0.113.10" {
+		t.Errorf("resolve = %+v", c.Resolve)
+	}
+}
+
 func TestHeadersAsMap(t *testing.T) {
 	c, err := loadString(t, "headers:\n  X-One: a\n  X-Two: b\n")
 	if err != nil {

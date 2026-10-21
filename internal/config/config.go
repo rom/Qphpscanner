@@ -47,6 +47,8 @@ type Config struct {
 	Basic   string // user:pass
 	Vhost   string
 	Proxy   string
+	Resolve []string // "host:port:addr" rules (curl --resolve style)
+	SNI     string   // TLS SNI override
 
 	// Data / resume / targets.
 	VulnFeeds        []string
@@ -124,6 +126,8 @@ func Load(path string) (*Config, error) {
 	c.Basic = getString(m, "basic")
 	c.Vhost = getString(m, "vhost")
 	c.Proxy = getString(m, "proxy")
+	c.Resolve = getStringSlice(m, "resolve")
+	c.SNI = getString(m, "sni")
 	c.FailOn = getString(m, "fail_on")
 	c.Resume = getString(m, "resume")
 	c.TargetsFile = getString(m, "targets_file")

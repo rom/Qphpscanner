@@ -97,6 +97,13 @@ type Options struct {
 	BasicPass   string
 	HostHeader  string
 	ProxyURL    string
+	// Resolve pins host:port pairs to fixed dial addresses (curl --resolve
+	// style): connect to a specific origin IP while keeping the URL host, Host
+	// header and TLS SNI as the real hostname.
+	Resolve []probe.ResolveRule
+	// SNIServerName overrides the TLS SNI for HTTPS probes. Intended for
+	// single-origin scans (e.g. comparing an origin behind a CDN).
+	SNIServerName string
 
 	// --- Data ---
 	// Catalog supplies vulnerability/EOL data (nil = built-in default).
@@ -225,6 +232,8 @@ func Scan(ctx context.Context, specs []string, opts Options) (*ScanResult, error
 		BasicPass:       opts.BasicPass,
 		HostHeader:      opts.HostHeader,
 		ProxyURL:        opts.ProxyURL,
+		Resolve:         opts.Resolve,
+		SNIServerName:   opts.SNIServerName,
 		Retries:         opts.Retries,
 		Limiter:         probe.NewRateLimiter(opts.RateLimit, rateBurst(opts.RateLimit)),
 		Recorder:        recorder,

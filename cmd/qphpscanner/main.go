@@ -25,6 +25,7 @@ import (
 	"github.com/rom/qphpscanner/internal/config"
 	"github.com/rom/qphpscanner/internal/php"
 	"github.com/rom/qphpscanner/internal/portspec"
+	"github.com/rom/qphpscanner/internal/probe"
 	"github.com/rom/qphpscanner/internal/report"
 	"github.com/rom/qphpscanner/internal/scanner"
 	"github.com/rom/qphpscanner/internal/version"
@@ -344,6 +345,15 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		opts.BearerToken = cfg.Bearer
 		opts.HostHeader = cfg.Vhost
 		opts.ProxyURL = cfg.Proxy
+		opts.SNIServerName = cfg.SNI
+		if len(cfg.Resolve) > 0 {
+			rules, rerr := parseResolveRules(cfg.Resolve)
+			if rerr != nil {
+				err = rerr
+				return
+			}
+			opts.Resolve = rules
+		}
 		opts.CheckpointPath = cfg.Resume
 		opts.PCAPPath = cfg.PCAP
 		opts.LogPath = cfg.Log
@@ -397,6 +407,17 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 	}
 	if set["proxy"] {
 		opts.ProxyURL = f.proxy
+	}
+	if set["sni"] {
+		opts.SNIServerName = f.sni
+	}
+	if len(f.resolve) > 0 {
+		rules, rerr := parseResolveRules(f.resolve)
+		if rerr != nil {
+			err = rerr
+			return
+		}
+		opts.Resolve = append(opts.Resolve, rules...)
 	}
 	if set["resume"] {
 		opts.CheckpointPath = f.resume
@@ -595,6 +616,21 @@ func splitColon(s string) (string, string) {
 		return s[:i], s[i+1:]
 	}
 	return s, ""
+}
+
+func parseResolveRules(rules []string) ([]probe.ResolveRule, error) {
+	out := make([]probe.ResolveRule, 0, len(rules))
+	for _, s := range rules {
+		if strings.TrimSpace(s) == "" {
+			continue
+		}
+		r, err := probe.ParseResolveRule(s)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, nil
 }
 
 func parseHeaders(hs stringSlice) map[string]string {

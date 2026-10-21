@@ -140,6 +140,7 @@ document.addEventListener("DOMContentLoaded", refreshHistory);
 document.addEventListener("DOMContentLoaded", showVersion);
 $("cmp-run") && $("cmp-run").addEventListener("click", runCompare);
 $("cmp-refresh") && $("cmp-refresh").addEventListener("click", refreshCompareList);
+$("oc-run") && $("oc-run").addEventListener("click", runOriginCompare);
 wireCompareUpload();
 $("stats-refresh") && $("stats-refresh").addEventListener("click", () => loadOverview(true).then(renderStats));
 $("info-refresh") && $("info-refresh").addEventListener("click", () => loadOverview(true).then(renderInfo));
@@ -167,6 +168,8 @@ async function runScan() {
     host_concurrency: parseInt($("hostconc").value, 10) || 0,
     allow: splitList($("allow").value),
     block: splitList($("block").value),
+    resolve: splitList($("resolve").value),
+    sni: $("sni").value.trim(),
   };
 
   scanBtn.disabled = true;
@@ -1172,6 +1175,46 @@ async function runCompare() {
     renderDiff(out, data.diff);
   } catch (err) {
     out.appendChild(el("p", "error", "Compare failed: " + err.message));
+  }
+}
+
+async function runOriginCompare() {
+  const out = $("oc-result");
+  out.replaceChildren();
+  const target = $("oc-target").value.trim();
+  const origin = $("oc-origin").value.trim();
+  if (!target || !origin) {
+    out.appendChild(el("p", "empty", "Enter both a target and an origin address."));
+    return;
+  }
+  const btn = $("oc-run");
+  btn.disabled = true;
+  out.appendChild(el("p", "note", "Scanning edge and origin…"));
+  try {
+    const resp = await fetch("api/origin-compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target,
+        origin,
+        ports: $("oc-ports").value.trim(),
+        insecure: $("oc-insecure").checked,
+        security_txt: true,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ("HTTP " + resp.status));
+    out.replaceChildren();
+    out.appendChild(el("p", "note",
+      `Edge vs origin for ${data.host} (origin ${data.origin_addr}). “Added” = present only via the origin; “Removed” = only via the edge.`));
+    renderDiff(out, data.diff);
+    invalidateOverview();
+    refreshHistory();
+  } catch (err) {
+    out.replaceChildren();
+    out.appendChild(el("p", "error", "Origin compare failed: " + err.message));
+  } finally {
+    btn.disabled = false;
   }
 }
 
