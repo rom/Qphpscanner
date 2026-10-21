@@ -3,9 +3,11 @@ package php
 import "regexp"
 
 var (
-	reVersion        = regexp.MustCompile(`(?i)php/(\d+\.\d+(?:\.\d+)?)`)
+	// The optional trailing group keeps a distro/backport suffix (e.g. Debian's
+	// "7.4.33-1+deb11u3") verbatim, so later stages can reason about backports.
+	reVersion        = regexp.MustCompile(`(?i)php/(\d+\.\d+(?:\.\d+)?(?:[-+~][A-Za-z0-9.\-+~]*)?)`)
 	reHHVM           = regexp.MustCompile(`(?i)hhvm/(\d+\.\d+(?:\.\d+)?)`)
-	rePHPInfoVersion = regexp.MustCompile(`(?i)PHP Version (\d+\.\d+\.\d+[A-Za-z0-9.\-]*)`)
+	rePHPInfoVersion = regexp.MustCompile(`(?i)PHP Version (\d+\.\d+\.\d+[A-Za-z0-9.\-+~]*)`)
 	reGenerator      = regexp.MustCompile(`(?is)<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)["']`)
 	reZendEngineLine = regexp.MustCompile(`(?i)Zend Engine v[\d.]+(?:,\s*(?:with|Copyright)[^<\n]*)?`)
 	// Loader/engine add-on line fragments that phpinfo prints.

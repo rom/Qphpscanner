@@ -1,6 +1,7 @@
 package php
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -106,13 +107,23 @@ func Analyze(in Input) *Detection {
 		modSet[m] = true
 		d.Modules = append(d.Modules, m)
 	}
+	obsSeen := map[string]bool{}
 	setVersion := func(v, source string, rank int) {
-		if v == "" || rank <= versionRank {
+		if v == "" {
 			return
 		}
-		d.Version = v
-		d.VersionSource = source
-		versionRank = rank
+		// Record every distinct (version, source) observation, keeping the raw
+		// string (incl. any distro/backport suffix).
+		if key := v + "\x00" + source; !obsSeen[key] {
+			obsSeen[key] = true
+			d.VersionObservations = append(d.VersionObservations, VersionObservation{Version: v, Source: source, Rank: rank})
+		}
+		// The best (highest-ranked) observation remains the headline Version.
+		if rank > versionRank {
+			d.Version = v
+			d.VersionSource = source
+			versionRank = rank
+		}
 	}
 	setVariant := func(v string) {
 		if v != "" && d.Variant == "" {
@@ -260,6 +271,8 @@ func Analyze(in Input) *Detection {
 	sort.Strings(d.Modules)
 	sortEvidence(d.Evidence)
 
+	d.VersionConflict = versionsConflict(d.VersionObservations)
+
 	if d.IsPHP {
 		d.SAPI = inferSAPI(in.Root, in.PathInfo != nil && in.PathInfo.Err == "" && in.PathInfo.Status == 200)
 	}
@@ -269,15 +282,45 @@ func Analyze(in Input) *Detection {
 		if cat == nil {
 			cat = DefaultCatalog()
 		}
+		facts := observedFacts(d)
 		d.EndOfLife, d.EOLDetail = cat.EOL(d.Variant, d.Version)
-		d.Vulnerabilities = cat.CorrelatePHP(d.Variant, d.Version)
+		d.Vulnerabilities = cat.CorrelatePHP(d.Variant, d.Version, facts)
 		for fw, ver := range d.FrameworkVersions {
-			d.Vulnerabilities = append(d.Vulnerabilities, cat.CorrelateCMS(fw, ver)...)
+			d.Vulnerabilities = append(d.Vulnerabilities, cat.CorrelateCMS(fw, ver, facts)...)
 		}
 		sortVulns(d.Vulnerabilities)
 	}
 
 	return d
+}
+
+// versionsConflict reports whether observations disagree at major.minor level.
+func versionsConflict(obs []VersionObservation) bool {
+	seen := map[string]bool{}
+	for _, o := range obs {
+		if maj, min, _, ok := parseVersion(o.Version); ok {
+			seen[fmt.Sprintf("%d.%d", maj, min)] = true
+		}
+	}
+	return len(seen) > 1
+}
+
+// observedFacts gathers the evidence used to resolve vulnerability
+// prerequisites: the inferred and (authoritative) phpinfo-observed SAPI, the
+// system/OS string, loaded extensions and observed ini directive values.
+func observedFacts(d *Detection) ObservedFacts {
+	f := ObservedFacts{SAPI: d.SAPI, Extensions: map[string]bool{}, Directives: map[string]string{}}
+	for _, e := range d.Extensions {
+		f.Extensions[strings.ToLower(e)] = true
+	}
+	if d.PHPInfo != nil {
+		f.PHPInfoSAPI = d.PHPInfo.SAPI
+		f.System = d.PHPInfo.System
+		for _, dir := range d.PHPInfo.Directives {
+			f.Directives[strings.ToLower(dir.Name)] = strings.ToLower(dir.Local)
+		}
+	}
+	return f
 }
 
 // analyzeResponse extracts header, cookie and body evidence from one response.

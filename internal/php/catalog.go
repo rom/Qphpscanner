@@ -71,6 +71,34 @@ type FeedEntry struct {
 	Reference   string      `json:"reference,omitempty"`
 	Note        string      `json:"note,omitempty"`
 	Affected    []RangeSpec `json:"affected"`
+	// Prereqs are structured applicability conditions resolved against the
+	// scan's observed evidence (optional; absent ⇒ a plain version-range lead).
+	Prereqs []Prereq `json:"prereqs,omitempty"`
+}
+
+// Prereq is a structured applicability condition for a lead.
+//
+//	Kind "sapi":      Want is a SAPI family token (mod_php, fpm, cgi, litespeed,
+//	                  cli-server, app-server).
+//	Kind "os":        Want is an OS token (windows, linux, darwin, bsd).
+//	Kind "extension": Want is a PHP extension name (observed only; never
+//	                  contradicted, since absence is not proof).
+//	Kind "config":    Want is an ini directive name and Value its required value
+//	                  (e.g. "on").
+type Prereq struct {
+	Kind   string `json:"kind"`
+	Want   string `json:"want"`
+	Value  string `json:"value,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// ObservedFacts is the evidence a scan gathered, used to resolve prerequisites.
+type ObservedFacts struct {
+	SAPI        string            // inferred SAPI (e.g. "apache (mod_php)", "php-cgi")
+	PHPInfoSAPI string            // authoritative SAPI from phpinfo (e.g. "cgi-fcgi")
+	System      string            // phpinfo System/uname line
+	Extensions  map[string]bool   // lowercased extension names present
+	Directives  map[string]string // lowercased ini directive -> local value
 }
 
 func (e FeedEntry) matches(v string) bool {
@@ -148,7 +176,9 @@ func (c *Catalog) Counts() (php, cms int) {
 
 // CorrelatePHP returns leads for the detected PHP version. HHVM and other
 // non-PHP runtimes use their own numbering and are skipped.
-func (c *Catalog) CorrelatePHP(variant, version string) []Vulnerability {
+// The optional facts argument supplies observed evidence for resolving
+// prerequisites; omitting it leaves prerequisites "unknown".
+func (c *Catalog) CorrelatePHP(variant, version string, facts ...ObservedFacts) []Vulnerability {
 	if version == "" {
 		return nil
 	}
@@ -158,11 +188,11 @@ func (c *Catalog) CorrelatePHP(variant, version string) []Vulnerability {
 	if _, _, _, ok := parseVersion(version); !ok {
 		return nil
 	}
-	return matchEntries(c.php, version, "version-correlation")
+	return matchEntries(c.php, version, "version-correlation", optFacts(facts))
 }
 
 // CorrelateCMS returns leads for a detected CMS/framework core version.
-func (c *Catalog) CorrelateCMS(framework, version string) []Vulnerability {
+func (c *Catalog) CorrelateCMS(framework, version string, facts ...ObservedFacts) []Vulnerability {
 	if framework == "" || version == "" {
 		return nil
 	}
@@ -173,10 +203,17 @@ func (c *Catalog) CorrelateCMS(framework, version string) []Vulnerability {
 	if _, _, _, ok := parseVersion(version); !ok {
 		return nil
 	}
-	return matchEntries(entries, version, framework+" version-correlation")
+	return matchEntries(entries, version, framework+" version-correlation", optFacts(facts))
 }
 
-func matchEntries(entries []FeedEntry, version, basisKind string) []Vulnerability {
+func optFacts(facts []ObservedFacts) ObservedFacts {
+	if len(facts) > 0 {
+		return facts[0]
+	}
+	return ObservedFacts{}
+}
+
+func matchEntries(entries []FeedEntry, version, basisKind string, facts ObservedFacts) []Vulnerability {
 	var out []Vulnerability
 	for _, e := range entries {
 		if !e.matches(version) {
@@ -186,7 +223,7 @@ func matchEntries(entries []FeedEntry, version, basisKind string) []Vulnerabilit
 		if e.Note != "" {
 			basis += "; applies to: " + e.Note
 		}
-		out = append(out, Vulnerability{
+		v := Vulnerability{
 			ID:               e.ID,
 			Severity:         e.Severity,
 			Title:            e.Title,
@@ -194,9 +231,156 @@ func matchEntries(entries []FeedEntry, version, basisKind string) []Vulnerabilit
 			Description:      e.Description,
 			Reference:        e.Reference,
 			MatchBasis:       basis,
-		})
+		}
+		v.Prerequisites, v.Applicability = resolvePrereqs(e.Prereqs, facts)
+		out = append(out, v)
 	}
 	return out
+}
+
+// resolvePrereqs resolves each prerequisite against the observed facts and
+// summarises applicability: any contradicted ⇒ "contradicted"; else any
+// observed ⇒ "observed"; else "" (plain lead).
+func resolvePrereqs(prereqs []Prereq, facts ObservedFacts) ([]PrereqResult, string) {
+	if len(prereqs) == 0 {
+		return nil, ""
+	}
+	results := make([]PrereqResult, 0, len(prereqs))
+	anyContradicted, anyObserved := false, false
+	for _, p := range prereqs {
+		state := resolvePrereq(p, facts)
+		switch state {
+		case "contradicted":
+			anyContradicted = true
+		case "observed":
+			anyObserved = true
+		}
+		results = append(results, PrereqResult{Detail: prereqDetail(p), State: state})
+	}
+	switch {
+	case anyContradicted:
+		return results, "contradicted"
+	case anyObserved:
+		return results, "observed"
+	default:
+		return results, ""
+	}
+}
+
+func prereqDetail(p Prereq) string {
+	if p.Detail != "" {
+		return p.Detail
+	}
+	switch p.Kind {
+	case "sapi":
+		return "requires the " + p.Want + " SAPI"
+	case "os":
+		return "requires " + p.Want
+	case "extension":
+		return "requires the " + p.Want + " extension"
+	case "config":
+		return "requires " + p.Want + " = " + p.Value
+	default:
+		return p.Kind + " " + p.Want
+	}
+}
+
+func resolvePrereq(p Prereq, facts ObservedFacts) string {
+	switch p.Kind {
+	case "sapi":
+		fam := sapiFamily(facts.PHPInfoSAPI)
+		if fam == "" {
+			fam = sapiFamily(facts.SAPI)
+		}
+		if fam == "" {
+			return "unknown"
+		}
+		if fam == strings.ToLower(p.Want) {
+			return "observed"
+		}
+		return "contradicted"
+	case "os":
+		os := osFamily(facts.System)
+		if os == "" {
+			return "unknown"
+		}
+		if os == strings.ToLower(p.Want) {
+			return "observed"
+		}
+		return "contradicted"
+	case "extension":
+		// Absence is not proof, so a missing extension is unknown, never contradicted.
+		if facts.Extensions[strings.ToLower(p.Want)] {
+			return "observed"
+		}
+		return "unknown"
+	case "config":
+		val, ok := facts.Directives[strings.ToLower(p.Want)]
+		if !ok {
+			return "unknown"
+		}
+		if onOff(val) == onOff(p.Value) {
+			return "observed"
+		}
+		return "contradicted"
+	default:
+		return "unknown"
+	}
+}
+
+// sapiFamily maps an observed SAPI string to a single family token, or "" when
+// it is unknown or ambiguous (so an ambiguous reading never contradicts).
+func sapiFamily(s string) string {
+	l := strings.ToLower(s)
+	switch {
+	case l == "":
+		return ""
+	case strings.Contains(l, "mod_php"), strings.Contains(l, "apache2handler"):
+		return "mod_php"
+	case strings.Contains(l, "litespeed"), strings.Contains(l, "lsapi"):
+		return "litespeed"
+	case strings.Contains(l, "cli-server"):
+		return "cli-server"
+	case strings.Contains(l, "frankenphp"), strings.Contains(l, "roadrunner"), strings.Contains(l, "swoole"):
+		return "app-server"
+	case strings.Contains(l, "fpm") && strings.Contains(l, "cgi"):
+		return "" // ambiguous (e.g. the inferred "php-cgi/php-fpm")
+	case strings.Contains(l, "fpm"):
+		return "fpm"
+	case strings.Contains(l, "cgi"):
+		return "cgi"
+	default:
+		return ""
+	}
+}
+
+func osFamily(system string) string {
+	l := strings.ToLower(system)
+	switch {
+	case l == "":
+		return ""
+	case strings.Contains(l, "windows") || strings.Contains(l, "win32") || strings.Contains(l, "win64"):
+		return "windows"
+	case strings.Contains(l, "darwin"):
+		return "darwin"
+	case strings.Contains(l, "linux"):
+		return "linux"
+	case strings.Contains(l, "bsd"):
+		return "bsd"
+	default:
+		return ""
+	}
+}
+
+func onOff(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "on", "1", "true", "enabled", "yes":
+		return "on"
+	case "off", "0", "false", "disabled", "no":
+		return "off"
+	default:
+		return strings.ToLower(strings.TrimSpace(v))
+	}
 }
 
 // EOL reports whether the version's release branch has reached end of security

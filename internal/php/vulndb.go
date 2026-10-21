@@ -32,6 +32,7 @@ var builtinPHP = []FeedEntry{
 		Reference: nvd + "CVE-2026-109618",
 		Note:      "PHP core; CVSS v4.0 9.2; patched in 8.2.35/8.3.36/8.4.27/8.5.12; EOL branches unpatched; version list provisional (confirm at php.net)",
 		Affected:  []RangeSpec{rng("5.4.0", "8.2.0"), br("8.2", "8.2.35"), br("8.3", "8.3.36"), br("8.4", "8.4.27"), br("8.5", "8.5.12")},
+		Prereqs:   []Prereq{{Kind: "config", Want: "session.upload_progress.enabled", Value: "on", Detail: "reachable via session upload-progress processing (session.upload_progress.enabled = On)"}},
 	},
 	{
 		ID: "CVE-2026-109619", Severity: "critical",
@@ -42,6 +43,7 @@ var builtinPHP = []FeedEntry{
 		Reference: nvd + "CVE-2026-109619",
 		Note:      "PHP core; CVSS v4.0 9.2; patched in 8.2.35/8.3.36/8.4.27/8.5.12; EOL branches unpatched; version list provisional (confirm at php.net)",
 		Affected:  []RangeSpec{rng("5.4.0", "8.2.0"), br("8.2", "8.2.35"), br("8.3", "8.3.36"), br("8.4", "8.4.27"), br("8.5", "8.5.12")},
+		Prereqs:   []Prereq{{Kind: "config", Want: "session.upload_progress.enabled", Value: "on", Detail: "reachable via multipart / session upload-progress processing (session.upload_progress.enabled = On)"}},
 	},
 
 	// ---- 8.1 / 8.2 / 8.3 era ----
@@ -51,6 +53,7 @@ var builtinPHP = []FeedEntry{
 		Description: "An incomplete fix for CVE-2024-4577 left php-cgi on Windows still passing crafted query strings as interpreter arguments.",
 		Reference:   nvd + "CVE-2024-5585", Note: "Windows php-cgi deployments only",
 		Affected: []RangeSpec{br("8.1", "8.1.29"), br("8.2", "8.2.20"), br("8.3", "8.3.8")},
+		Prereqs:  []Prereq{{Kind: "sapi", Want: "cgi"}, {Kind: "os", Want: "windows"}},
 	},
 	{
 		ID: "CVE-2024-4577", Severity: "critical",
@@ -58,6 +61,7 @@ var builtinPHP = []FeedEntry{
 		Description: "Argument injection in php-cgi on Windows allows passing options to the PHP interpreter, leading to source disclosure or remote code execution. Exploited in the wild.",
 		Reference:   nvd + "CVE-2024-4577", Note: "Windows php-cgi deployments only",
 		Affected: []RangeSpec{br("8.1", "8.1.29"), br("8.2", "8.2.20"), br("8.3", "8.3.8"), lo("8.1.0")},
+		Prereqs:  []Prereq{{Kind: "sapi", Want: "cgi"}, {Kind: "os", Want: "windows"}},
 	},
 	{
 		ID: "CVE-2024-11236", Severity: "critical",
@@ -276,6 +280,7 @@ var builtinPHP = []FeedEntry{
 		Description: "An underflow in fpm_main.c with certain nginx + PHP-FPM configurations allows remote code execution. Exploited in the wild.",
 		Reference:   nvd + "CVE-2019-11043", Note: "nginx + PHP-FPM with a vulnerable fastcgi_split_path_info config",
 		Affected: []RangeSpec{br("7.1", "7.1.33"), br("7.2", "7.2.24"), br("7.3", "7.3.11")},
+		Prereqs:  []Prereq{{Kind: "sapi", Want: "fpm", Detail: "requires PHP-FPM (behind nginx with a vulnerable fastcgi_split_path_info)"}},
 	},
 	{
 		ID: "CVE-2019-11050", Severity: "medium",

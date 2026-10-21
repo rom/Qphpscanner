@@ -903,6 +903,14 @@ function renderService(svc, target) {
     if (php.variant) add("Variant", php.variant);
     if (php.sapi) add("SAPI (guess)", php.sapi);
     if (php.version) add("Version", php.version + (php.version_source ? " (via " + php.version_source + ")" : ""));
+    if (php.version_conflict) {
+      kv.appendChild(el("dt", null, "Version conflict"));
+      const dd = el("dd", "warn", "sources disagree (possible multiple backends / cache / apps)");
+      kv.appendChild(dd);
+    }
+    if (php.version_observations && php.version_observations.length > 1) {
+      add("Version seen", php.version_observations.map((o) => o.version + " (" + o.source + ")").join(", "));
+    }
     if (php.framework_versions) {
       for (const fw of Object.keys(php.framework_versions)) add(fw + " version", php.framework_versions[fw]);
     }
@@ -974,7 +982,21 @@ function renderVulns(vulns) {
     sev.title = "Severity of this version-correlated lead (informational, not a confirmed finding).";
     li.appendChild(sev);
     li.appendChild(document.createTextNode(v.id + " — " + v.title));
+    if (v.applicability === "contradicted") {
+      const b = el("span", "appl appl-contradicted", "likely N/A here");
+      b.title = "A required precondition is contradicted by observed evidence — this lead likely does not apply to this service (not a safety guarantee).";
+      li.appendChild(b);
+    } else if (v.applicability === "observed") {
+      const b = el("span", "appl appl-observed", "preconditions met");
+      b.title = "The lead's preconditions were observed on this service.";
+      li.appendChild(b);
+    }
     li.appendChild(el("div", "note", "affects " + v.affected_versions + " · " + v.match_basis));
+    if (v.prerequisites && v.prerequisites.length) {
+      for (const p of v.prerequisites) {
+        li.appendChild(el("div", "note prereq-" + p.state, "precondition (" + p.state + "): " + p.detail));
+      }
+    }
     ul.appendChild(li);
   }
   d.appendChild(ul);
