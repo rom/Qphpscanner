@@ -18,7 +18,40 @@ const nvd = "https://nvd.nist.gov/vuln/detail/"
 
 // builtinPHP is the curated PHP-core CVE catalogue.
 var builtinPHP = []FeedEntry{
+	// ---- "php2shell" (October 2026) ----
+	// Two critical PHP-core RCEs disclosed and patched out-of-band on
+	// 2026-10-21. Affected-version data is sourced from public reporting
+	// (Sansec/Unit 42/Tenable) and is provisional until the php.net advisory
+	// is confirmed; version-correlation here is an informational lead.
+	{
+		ID: "CVE-2026-109618", Severity: "critical",
+		Title: "PHP core remote code execution (\"php2shell\")",
+		Description: "Critical PHP-core RCE: out-of-memory handling via longjmp() leaves " +
+			"request memory uninitialised, which can be steered to reliable remote code " +
+			"execution. Mitigate with session.upload_progress.enabled=0 until patched.",
+		Reference: nvd + "CVE-2026-109618",
+		Note:      "PHP core; CVSS v4.0 9.2; patched in 8.2.35/8.3.36/8.4.27/8.5.12; EOL branches unpatched; version list provisional (confirm at php.net)",
+		Affected:  []RangeSpec{rng("5.4.0", "8.2.0"), br("8.2", "8.2.35"), br("8.3", "8.3.36"), br("8.4", "8.4.27"), br("8.5", "8.5.12")},
+	},
+	{
+		ID: "CVE-2026-109619", Severity: "critical",
+		Title: "PHP core remote code execution (\"php2shell\")",
+		Description: "Critical PHP-core RCE: longjmp() fatal-error handling leaves global state " +
+			"referencing freed memory (use-after-free), reachable via multipart request / " +
+			"session upload-progress processing. Mitigate with session.upload_progress.enabled=0 until patched.",
+		Reference: nvd + "CVE-2026-109619",
+		Note:      "PHP core; CVSS v4.0 9.2; patched in 8.2.35/8.3.36/8.4.27/8.5.12; EOL branches unpatched; version list provisional (confirm at php.net)",
+		Affected:  []RangeSpec{rng("5.4.0", "8.2.0"), br("8.2", "8.2.35"), br("8.3", "8.3.36"), br("8.4", "8.4.27"), br("8.5", "8.5.12")},
+	},
+
 	// ---- 8.1 / 8.2 / 8.3 era ----
+	{
+		ID: "CVE-2024-5585", Severity: "critical",
+		Title:       "php-cgi argument injection (BatBadBut follow-up to CVE-2024-4577)",
+		Description: "An incomplete fix for CVE-2024-4577 left php-cgi on Windows still passing crafted query strings as interpreter arguments.",
+		Reference:   nvd + "CVE-2024-5585", Note: "Windows php-cgi deployments only",
+		Affected: []RangeSpec{br("8.1", "8.1.29"), br("8.2", "8.2.20"), br("8.3", "8.3.8")},
+	},
 	{
 		ID: "CVE-2024-4577", Severity: "critical",
 		Title:       "PHP-CGI argument injection (regression of CVE-2012-1823)",
@@ -266,6 +299,51 @@ var builtinPHP = []FeedEntry{
 		Affected:    []RangeSpec{br("7.1", "7.1.27"), br("7.2", "7.2.16"), br("7.3", "7.3.3")},
 	},
 
+	{
+		ID: "CVE-2019-11045", Severity: "medium",
+		Title:       "rfc1867 file-upload path truncation via null byte",
+		Description: "A null byte in a multipart filename could truncate the stored path.",
+		Reference:   nvd + "CVE-2019-11045",
+		Affected:    []RangeSpec{br("7.2", "7.2.27"), br("7.3", "7.3.14"), br("7.4", "7.4.2")},
+	},
+
+	// ---- 5.6 / 7.0 / 7.1 / 7.2 era ----
+	{
+		ID: "CVE-2018-10545", Severity: "medium",
+		Title:       "PHP-FPM worker crash / dumpable state disclosure",
+		Description: "A dumpable FPM worker could expose opcache memory to other local users.",
+		Reference:   nvd + "CVE-2018-10545",
+		Affected:    []RangeSpec{br("5.6", "5.6.36"), br("7.0", "7.0.30"), br("7.1", "7.1.17"), br("7.2", "7.2.5")},
+	},
+	{
+		ID: "CVE-2018-10546", Severity: "medium",
+		Title:       "iconv stream filter infinite loop (DoS)",
+		Description: "A malformed multibyte sequence in the convert.iconv filter can hang the process.",
+		Reference:   nvd + "CVE-2018-10546",
+		Affected:    []RangeSpec{br("5.6", "5.6.36"), br("7.0", "7.0.30"), br("7.1", "7.1.17"), br("7.2", "7.2.5")},
+	},
+	{
+		ID: "CVE-2018-10547", Severity: "medium",
+		Title:       "phar: reflected XSS on the error page",
+		Description: "An incomplete fix for CVE-2018-5712 left a reflected XSS in phar error output.",
+		Reference:   nvd + "CVE-2018-10547",
+		Affected:    []RangeSpec{br("5.6", "5.6.36"), br("7.0", "7.0.30"), br("7.1", "7.1.17"), br("7.2", "7.2.5")},
+	},
+	{
+		ID: "CVE-2018-10548", Severity: "medium",
+		Title:       "ldap_search() null pointer dereference (DoS)",
+		Description: "A malicious LDAP server response can crash the client via a null dereference.",
+		Reference:   nvd + "CVE-2018-10548",
+		Affected:    []RangeSpec{br("5.6", "5.6.36"), br("7.0", "7.0.30"), br("7.1", "7.1.17"), br("7.2", "7.2.5")},
+	},
+	{
+		ID: "CVE-2018-10549", Severity: "high",
+		Title:       "exif: out-of-bounds read parsing crafted JPEG",
+		Description: "An out-of-bounds read in exif_read_data with a crafted image.",
+		Reference:   nvd + "CVE-2018-10549",
+		Affected:    []RangeSpec{br("5.6", "5.6.36"), br("7.0", "7.0.30"), br("7.1", "7.1.17"), br("7.2", "7.2.5")},
+	},
+
 	// ---- 5.x / 7.0 era ----
 	{
 		ID: "CVE-2018-19935", Severity: "medium",
@@ -350,6 +428,20 @@ var builtinCMS = map[string][]FeedEntry{
 			Reference:   nvd + "CVE-2022-21662",
 			Affected:    []RangeSpec{lo("5.8.3")},
 		},
+		{
+			ID: "CVE-2023-5561", Severity: "medium",
+			Title:       "WordPress: user-email disclosure via the Application Passwords API",
+			Description: "An insufficient access check in the Application Passwords endpoint could disclose user email addresses.",
+			Reference:   nvd + "CVE-2023-5561",
+			Affected:    []RangeSpec{lo("6.3.2")},
+		},
+		{
+			ID: "CVE-2024-4439", Severity: "medium",
+			Title:       "WordPress: stored XSS via the author-avatar block",
+			Description: "A stored cross-site scripting issue in the core avatar block in affected versions.",
+			Reference:   nvd + "CVE-2024-4439",
+			Affected:    []RangeSpec{lo("6.5.2")},
+		},
 	},
 	"drupal": {
 		{
@@ -389,6 +481,13 @@ var builtinCMS = map[string][]FeedEntry{
 			Reference:   nvd + "CVE-2015-8562",
 			Affected:    []RangeSpec{rng("1.5.0", "3.4.6")},
 		},
+		{
+			ID: "CVE-2024-21726", Severity: "medium",
+			Title:       "Joomla: core XSS via inadequate content filtering",
+			Description: "Inadequate filtering in the core content layer allows stored cross-site scripting that can be chained to privilege escalation.",
+			Reference:   nvd + "CVE-2024-21726",
+			Affected:    []RangeSpec{rng("4.0.0", "4.4.3"), rng("5.0.0", "5.0.3")},
+		},
 	},
 }
 
@@ -407,4 +506,5 @@ var builtinEOL = map[string]string{
 	"8.2": "2026-12-31",
 	"8.3": "2027-12-31",
 	"8.4": "2028-12-31",
+	"8.5": "2029-12-31",
 }

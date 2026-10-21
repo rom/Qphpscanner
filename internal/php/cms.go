@@ -12,6 +12,8 @@ var (
 	reDrupalGen       = regexp.MustCompile(`(?i)<meta[^>]+name=["']generator["'][^>]+content=["']Drupal ([0-9]+(?:\.[0-9]+)*)`)
 	reJoomlaManifest  = regexp.MustCompile(`(?i)<version>\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)\s*</version>`)
 	reJoomlaGen       = regexp.MustCompile(`(?i)<meta[^>]+name=["']generator["'][^>]+content=["']Joomla!? ([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
+	reMediaWikiGen    = regexp.MustCompile(`(?i)<meta[^>]+name=["']generator["'][^>]+content=["']MediaWiki ([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
+	reTYPO3Gen        = regexp.MustCompile(`(?i)<meta[^>]+name=["']generator["'][^>]+content=["']TYPO3 CMS ([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
 )
 
 // detectCMSVersions extracts CMS/framework core versions from the collected
@@ -68,6 +70,12 @@ func detectCMSVersions(in Input, fwSet map[string]bool, addEv func(Evidence), ad
 		}
 		if m := reJoomlaGen.FindStringSubmatch(b.text); m != nil {
 			consider("Joomla", m[1], b.url)
+		}
+		if m := reMediaWikiGen.FindStringSubmatch(b.text); m != nil {
+			consider("MediaWiki", m[1], b.url)
+		}
+		if m := reTYPO3Gen.FindStringSubmatch(b.text); m != nil {
+			consider("TYPO3", m[1], b.url)
 		}
 	}
 
