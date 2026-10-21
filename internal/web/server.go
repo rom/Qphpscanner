@@ -8,6 +8,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -65,6 +66,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/download", s.handleDownload)
 	mux.HandleFunc("GET /api/history", s.handleHistory)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
+	mux.HandleFunc("POST /api/diff-upload", s.handleDiffUpload)
 	mux.HandleFunc("GET /api/overview", s.handleOverview)
 	// Any other /api/ request (wrong method, unknown path) gets a clean JSON
 	// error instead of falling through to the file server, whose 404/405 for a
@@ -281,7 +283,12 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		send(streamMsg{Type: "service", Service: &r})
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	// No artificial scan deadline: a long scan runs until it finishes or the
+	// client disconnects/cancels (which cancels r.Context()). Individual
+	// requests are still bounded by the per-probe timeout, and the Cancel
+	// button aborts the stream. This avoids killing a legitimate long scan
+	// with "context deadline exceeded".
+	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
 	result, err := scanner.Scan(ctx, targets, opts)
@@ -390,6 +397,32 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	b := s.lookup(latestID(idb))
 	if a == nil || b == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "both scans must exist (run or select two scans first)"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"a":    scanMeta(a),
+		"b":    scanMeta(b),
+		"diff": report.Diff(a, b),
+	})
+}
+
+// handleDiffUpload diffs an uploaded saved scan (JSON or XML) against a
+// retained scan ("b" query param; "" or "latest" = newest). The uploaded file
+// is the baseline (A).
+func (s *Server) handleDiffUpload(w http.ResponseWriter, r *http.Request) {
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 32<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "read upload: " + err.Error()})
+		return
+	}
+	a, err := report.LoadScanAny(data)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error()})
+		return
+	}
+	b := s.lookup(latestID(r.URL.Query().Get("b")))
+	if b == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{"error": "no scan to compare against — run a scan first"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{

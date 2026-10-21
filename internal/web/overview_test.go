@@ -169,3 +169,63 @@ func TestScanStreamsServiceMessages(t *testing.T) {
 		t.Errorf("expected both open (%d) and closed (%d) services streamed", open, closed)
 	}
 }
+
+func TestOverviewBreakdownsAndUploadDiff(t *testing.T) {
+	target := phpTarget()
+	defer target.Close()
+	s := NewServer("x")
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	body := `{"targets":["` + target.URL + `"],"mode":"deep","tls":"off","security_txt":false}`
+	runScan(t, srv.URL, body)
+
+	// Overview now carries severity/verdict breakdowns for the charts.
+	var ov overview
+	getJSON(t, srv.URL+"/api/overview", &ov)
+	if ov.Stats.VerdictBreakdown["confirmed"] == 0 {
+		t.Errorf("verdict_breakdown missing confirmed: %+v", ov.Stats.VerdictBreakdown)
+	}
+	if len(ov.Stats.SeverityBreakdown) == 0 {
+		t.Errorf("severity_breakdown empty: %+v", ov.Stats.SeverityBreakdown)
+	}
+
+	// Download the scan as JSON, then diff that uploaded file against the
+	// retained latest scan.
+	dr, err := http.Get(srv.URL + "/api/download?format=json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, _ := io.ReadAll(dr.Body)
+	dr.Body.Close()
+
+	resp, err := http.Post(srv.URL+"/api/diff-upload?b=latest", "application/octet-stream", strings.NewReader(string(saved)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("diff-upload status %d", resp.StatusCode)
+	}
+	var d map[string]interface{}
+	data, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(data, &d); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if _, ok := d["diff"]; !ok {
+		t.Errorf("diff-upload response missing diff: %s", data)
+	}
+
+	// Also accept the XML form.
+	xr, _ := http.Get(srv.URL + "/api/download?format=xml")
+	xdata, _ := io.ReadAll(xr.Body)
+	xr.Body.Close()
+	xresp, err := http.Post(srv.URL+"/api/diff-upload?b=latest", "application/xml", strings.NewReader(string(xdata)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer xresp.Body.Close()
+	if xresp.StatusCode != 200 {
+		t.Fatalf("diff-upload (xml) status %d", xresp.StatusCode)
+	}
+}

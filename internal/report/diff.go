@@ -1,7 +1,9 @@
 package report
 
 import (
+	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"sort"
@@ -169,4 +171,21 @@ func LoadScan(data []byte) (*scanner.ScanResult, error) {
 		return nil, fmt.Errorf("parse scan result: %w", err)
 	}
 	return &res, nil
+}
+
+// LoadScanAny reads a previously-saved scan result as either JSON or XML
+// (sniffed from the first non-space byte), for diffing an uploaded file.
+func LoadScanAny(data []byte) (*scanner.ScanResult, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("empty scan file")
+	}
+	if trimmed[0] == '<' {
+		var res scanner.ScanResult
+		if err := xml.Unmarshal(trimmed, &res); err != nil {
+			return nil, fmt.Errorf("parse XML scan result: %w", err)
+		}
+		return &res, nil
+	}
+	return LoadScan(trimmed)
 }

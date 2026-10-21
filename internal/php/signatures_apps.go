@@ -10,6 +10,9 @@ func init() {
 }
 
 var appHeaderSigs = []headerSig{
+	// ONLYOFFICE Document Server is a Node.js/C++ stack, not PHP: detect the
+	// product (phpImplied=false) without boosting PHP confidence.
+	{"Set-Cookie", "asc_auth_key", "ONLYOFFICE", false, "", 50, "ONLYOFFICE auth cookie"},
 	{"X-Magento-Cache-Debug", "", "Magento", true, "", 60, "Magento full-page-cache debug header"},
 	{"X-Magento-Tags", "", "Magento", true, "", 55, "Magento cache-tags header"},
 	{"X-Magento-Cache-Control", "", "Magento", true, "", 45, "Magento cache-control header"},
@@ -29,4 +32,6 @@ var appBodySigs = []bodySig{
 	{"body.magento-fpc", regexp.MustCompile(`(?i)/customer/section/load/|mage-cache-storage|Magento_Ui/`), "Magento", true, 45, "Magento customer-section / cache markers"},
 	{"body.drupal2", regexp.MustCompile(`(?i)Drupal\.settings|drupalSettings|data-drupal-|/core/misc/drupal\.js|/core/(modules|themes)/`), "Drupal", true, 50, "Drupal runtime / core-path markers"},
 	{"body.drupal-aggregate", regexp.MustCompile(`(?i)/sites/default/files/(css|js)/|/sites/[^/"']+/files/`), "Drupal", true, 45, "Drupal aggregated-asset paths"},
+	// ONLYOFFICE (Document Server / Docs / DocSpace) — not PHP.
+	{"body.onlyoffice", regexp.MustCompile(`(?i)ONLYOFFICE|/web-apps/apps/|/sdkjs/|DocsAPI\.DocEditor|documentserver|asc_desktop`), "ONLYOFFICE", false, 40, "ONLYOFFICE Document Server markers"},
 }

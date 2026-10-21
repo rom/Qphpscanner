@@ -107,3 +107,17 @@ func TestDrupalMarkers(t *testing.T) {
 		t.Errorf("Drupal should classify as PHP (conf %d)", d.Confidence)
 	}
 }
+
+func TestOnlyOfficeDetectedNotPHP(t *testing.T) {
+	d := Analyze(Input{
+		TargetURL: "http://h/",
+		Root: resp(200, nil, []string{"asc_auth_key"},
+			`<html>ONLYOFFICE <script src="/web-apps/apps/api/documents/api.js"></script></html>`),
+	})
+	if !hasStr(d.Frameworks, "ONLYOFFICE") {
+		t.Fatalf("ONLYOFFICE not detected: %v", d.Frameworks)
+	}
+	if d.IsPHP {
+		t.Errorf("ONLYOFFICE (Node/C++) must not be classified as PHP (conf %d)", d.Confidence)
+	}
+}
