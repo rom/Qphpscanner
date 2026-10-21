@@ -51,6 +51,9 @@ async function runScan() {
     security_txt: $("securitytxt").checked,
     insecure: $("insecure").checked,
     include_closed: $("includeclosed").checked,
+    resolve_dns: $("resolvedns").checked,
+    banners: $("banners").checked,
+    host_concurrency: parseInt($("hostconc").value, 10) || 0,
   };
 
   scanBtn.disabled = true;

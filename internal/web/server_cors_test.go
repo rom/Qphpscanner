@@ -5,6 +5,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/rom/qphpscanner/internal/scanner"
 )
 
 func TestCORSPreflight(t *testing.T) {
@@ -108,5 +111,22 @@ func TestAPIFallbackUnknownPath(t *testing.T) {
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+}
+
+func TestDownloadNameTimestamped(t *testing.T) {
+	res := &scanner.ScanResult{}
+	res.Meta.FinishedAt = time.Date(2026, 10, 21, 13, 5, 7, 0, time.UTC)
+	got := downloadName(res, "scan-3", "json", true)
+	if got != "qphpscan-20261021-130507-scan-3.json" {
+		t.Errorf("output name = %q", got)
+	}
+	rep := downloadName(res, "", "pdf", false)
+	if rep != "qphpscan-20261021-130507-report.pdf" {
+		t.Errorf("report name = %q", rep)
+	}
+	// A dodgy scan id is sanitised.
+	if n := downloadName(res, "../../etc/passwd", "csv", true); n != "qphpscan-20261021-130507-etcpasswd.csv" {
+		t.Errorf("unsanitised name = %q", n)
 	}
 }

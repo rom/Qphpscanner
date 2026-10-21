@@ -66,7 +66,17 @@
             <label class="check"><input type="checkbox" id="securitytxt" checked> Fetch security.txt</label>
             <label class="check"><input type="checkbox" id="insecure"> Ignore TLS errors</label>
             <label class="check"><input type="checkbox" id="includeclosed"> Show closed ports</label>
+            <label class="check"><input type="checkbox" id="resolvedns"> Resolve DNS (A/PTR)</label>
+            <label class="check"><input type="checkbox" id="banners"> Grab service banners</label>
           </div>
+        </div>
+
+        <div class="grid2">
+          <div>
+            <label for="hostconc">Host concurrency</label>
+            <input id="hostconc" type="number" min="0" max="500" value="0" title="0 = no host-level cap">
+          </div>
+          <div></div>
         </div>
 
         <div class="btn-row">
