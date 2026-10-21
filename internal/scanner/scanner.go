@@ -95,6 +95,13 @@ type Options struct {
 	// CheckpointPath records completed services so a scan can resume.
 	CheckpointPath string
 
+	// --- Target filtering ---
+	// Allowlist, when non-empty, keeps only endpoints whose host matches one
+	// of its patterns. Blocklist drops endpoints whose host matches. Patterns
+	// are an exact host/IP, a CIDR block, or a "*.domain"/".domain" suffix.
+	Allowlist []string
+	Blocklist []string
+
 	// --- Audit trail ---
 	// PCAPPath, when set, writes a libpcap capture reconstructing every HTTP
 	// exchange as a TCP conversation (opens in Wireshark/tcpdump).
@@ -383,7 +390,7 @@ func expandTargets(ctx context.Context, specs []string, opts Options) ([]target.
 		}
 		eps = append(eps, e...)
 	}
-	return eps, nil
+	return filterEndpoints(eps, opts), nil
 }
 
 func emitEnum(opts Options, msg string) {

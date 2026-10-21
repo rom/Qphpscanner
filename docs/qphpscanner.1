@@ -156,6 +156,14 @@ Route requests through an http(s):// or socks5:// proxy.
 Load a favicon-hash → product catalogue (JSON) to attribute matched site
 favicons. Repeatable.
 .TP
+.BI \-\-allow " pattern"
+Keep only targets whose host matches \fIpattern\fR (an exact host/IP, a CIDR
+block, or a \fB*.domain\fR / \fB.domain\fR suffix). Repeatable.
+.TP
+.BI \-\-block " pattern"
+Drop targets whose host matches \fIpattern\fR (same forms as \fB\-\-allow\fR).
+Repeatable; applied after the allow list.
+.TP
 .BI \-\-vuln\-feed " file|url"
 Merge an external vulnerability feed (repeatable). The native
 qphpscanner-vuln-feed schema, OSV records (single or array) and CSAF 2.0

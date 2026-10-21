@@ -414,6 +414,14 @@ func resolve(f *flags, set map[string]bool, cfg *config.Config, posArgs []string
 		opts.BasicUser, opts.BasicPass = splitColon(f.basicAuth)
 	}
 
+	// Allow/block lists combine config entries with any from the CLI.
+	opts.Allowlist = append([]string(nil), f.allow...)
+	opts.Blocklist = append([]string(nil), f.block...)
+	if cfg != nil {
+		opts.Allowlist = append(append([]string(nil), cfg.Allow...), opts.Allowlist...)
+		opts.Blocklist = append(append([]string(nil), cfg.Block...), opts.Blocklist...)
+	}
+
 	// Options read later in run() from f: fold config in when the flag is unset.
 	if cfg != nil {
 		if !set["fail-on"] && cfg.FailOn != "" {
