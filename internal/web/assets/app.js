@@ -95,6 +95,13 @@ if (sortEl) {
     resortResults();
   });
 }
+const failSortEl = $("fail-sort");
+if (failSortEl) {
+  failSortEl.addEventListener("change", () => {
+    failSortMode = failSortEl.value;
+    if (scanRender && !scanRender.pendingClear) renderFailures();
+  });
+}
 function showResultTab(which) {
   for (const rt of document.querySelectorAll(".rtab")) {
     rt.classList.toggle("active", rt.dataset.rtab === which);
@@ -102,6 +109,12 @@ function showResultTab(which) {
   resultsEl.classList.toggle("hidden", which !== "ok");
   phpResultsEl.classList.toggle("hidden", which !== "php");
   failuresEl.classList.toggle("hidden", which !== "fail");
+  // The sort control is contextual: Results/PHP use one set of orders, the
+  // Failures tab another (scan order vs grouped by failure type).
+  const rsw = $("results-sort-wrap");
+  const fsw = $("fail-sort-wrap");
+  if (rsw) rsw.classList.toggle("hidden", !(which === "ok" || which === "php"));
+  if (fsw) fsw.classList.toggle("hidden", which !== "fail");
 }
 
 function showView(name) {
@@ -354,6 +367,9 @@ function setStatus(msg, isError) {
 let scanRender = null;
 
 let sortMode = "scan";
+// failSortMode orders the Failures tab: "scan" (host order) or "type" (grouped
+// into i/o timeouts first, then other errors).
+let failSortMode = "scan";
 
 // RENDER_CAP bounds how many service cards each bucket draws in the live view.
 // Long scans can produce thousands of (mostly closed-port) results; drawing
@@ -481,10 +497,51 @@ function liveRenderOK(svc) {
   if (dirtyOK || dirtyPHP) scheduleRender();
 }
 
-// liveRenderFail appends a failed/closed/non-HTTP service to the Failures tab.
-// Failures are always scan-order host-grouped, so they append incrementally.
+// liveRenderFail adds a failed/closed/non-HTTP service to the Failures tab. In
+// scan order it appends incrementally; grouped "by failure type" it falls back
+// to a coalesced full re-render (bounded by the render cap).
 function liveRenderFail(svc) {
-  liveAppendCard(failuresEl, scanRender.failGroups, svc, scanRender.failState);
+  if (failSortMode === "scan") {
+    liveAppendCard(failuresEl, scanRender.failGroups, svc, scanRender.failState);
+  } else {
+    dirtyFail = true;
+    scheduleRender();
+  }
+}
+
+// isTimeoutFailure marks a failure whose error is an i/o timeout / deadline.
+function isTimeoutFailure(svc) {
+  return /i\/o timeout|timed out|timeout|deadline exceeded/i.test((svc && svc.error) || "");
+}
+
+// renderFailures (re)draws the Failures tab honouring failSortMode.
+function renderFailures() {
+  if (!scanRender) return;
+  const list = scanRender.failList;
+  if (failSortMode === "type") {
+    failuresEl.replaceChildren();
+    appendFailSection(failuresEl, "i/o timeout", list.filter(isTimeoutFailure));
+    appendFailSection(failuresEl, "other", list.filter((s) => !isTimeoutFailure(s)));
+  } else {
+    renderBucket(failuresEl, list, "scan");
+  }
+}
+
+// appendFailSection renders one labelled, capped group of failure cards.
+function appendFailSection(container, label, list) {
+  if (!list.length) return;
+  const wrap = el("div", "host-group");
+  wrap.appendChild(el("h3", null, `${label} (${list.length})`));
+  const body = el("div");
+  let n = 0;
+  for (const svc of list) {
+    if (n >= RENDER_CAP) break;
+    body.appendChild(renderService(svc, dnsFor(svc)));
+    n++;
+  }
+  if (list.length > RENDER_CAP) body.appendChild(bucketCapNote(list.length - RENDER_CAP));
+  wrap.appendChild(body);
+  container.appendChild(wrap);
 }
 
 // liveAppendCard appends one service card to a host-grouped container, creating
@@ -521,6 +578,7 @@ function updateCapNote(container, state) {
 // streamed services triggers at most one rebuild per frame.
 let dirtyOK = false;
 let dirtyPHP = false;
+let dirtyFail = false;
 let renderQueued = false;
 function scheduleRender() {
   if (renderQueued) return;
@@ -528,11 +586,12 @@ function scheduleRender() {
   const run = () => {
     renderQueued = false;
     if (!scanRender || scanRender.pendingClear) {
-      dirtyOK = dirtyPHP = false;
+      dirtyOK = dirtyPHP = dirtyFail = false;
       return;
     }
     if (dirtyOK) { dirtyOK = false; renderResultsTab(); }
     if (dirtyPHP) { dirtyPHP = false; renderBucket(phpResultsEl, scanRender.phpList, sortMode); }
+    if (dirtyFail) { dirtyFail = false; renderFailures(); }
   };
   if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
   else setTimeout(run, 16);
@@ -647,6 +706,8 @@ function finishScanRender(result) {
   }
   renderResultsTab();
   renderBucket(phpResultsEl, scanRender.phpList, sortMode);
+  // Re-group the streamed failures if the user chose a non-scan failure order.
+  if (failSortMode !== "scan") renderFailures();
   updateResultCounts();
   if (scanRender.okList.length === 0 && scanRender.failList.length === 0) {
     resultsEl.appendChild(el("p", "empty", "No open services found."));

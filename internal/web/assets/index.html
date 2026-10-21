@@ -148,12 +148,19 @@
         <button type="button" class="rtab active" data-rtab="ok" title="Services that responded over HTTP">Results <span id="ok-count" class="rtab-count">0</span></button>
         <button type="button" class="rtab" data-rtab="php" title="Only services classified as PHP (any positive verdict)">PHP <span id="php-count" class="rtab-count">0</span></button>
         <button type="button" class="rtab" data-rtab="fail" title="Closed/filtered ports, connection errors, timeouts and open non-HTTP ports">Failures <span id="fail-count" class="rtab-count">0</span></button>
-        <span class="sort-wrap">
+        <span class="sort-wrap" id="results-sort-wrap">
           <label for="sort" class="sort-label">Sort</label>
           <select id="sort" class="sort-select" title="Order the Results and PHP tabs: scan order, PHP services (highest confidence first) on top, or services with the most critical vulnerability leads on top">
             <option value="scan">Scan order</option>
             <option value="php">PHP first</option>
             <option value="vuln">Most critical vulns first</option>
+          </select>
+        </span>
+        <span class="sort-wrap hidden" id="fail-sort-wrap">
+          <label for="fail-sort" class="sort-label">Sort</label>
+          <select id="fail-sort" class="sort-select" title="Order the Failures tab: scan order, or grouped by failure type (i/o timeouts first, then other errors)">
+            <option value="scan">Scan order</option>
+            <option value="type">By failure type (timeouts / other)</option>
           </select>
         </span>
       </div>
